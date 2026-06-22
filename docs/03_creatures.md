@@ -78,9 +78,9 @@ Full envisioned action space:
 | Rest | **Yes** | Reduce fatigue, slight energy recovery |
 | Consume organic | **Yes** | Transfer organic fraction from adjacent voxel → energy |
 | Drink | Planned | Absorb pore/surface water → hydration |
-| Carry | Planned | Pick up material → `carried_mass` |
-| Drop | Planned | Deposit carried material into voxel |
-| Dig | Planned | Remove solid fraction from voxel |
+| Carry | **Yes** | Pick up adjacent organic → `carried_mass` (cap 0.5) |
+| Drop | **Yes** | Deposit `carried_mass` organic into adjacent void voxel |
+| Dig | **Yes** | Reduce solid/organic at position, increase void; energy cost |
 | Place | Planned | Add carried material to voxel |
 | Emit sound | Planned | Produce acoustic signal ([10_communication.md](10_communication.md)) |
 | Follow | Planned | Move toward sensory gradient |
@@ -92,9 +92,13 @@ Skeleton `Action` enum in `sim-core/src/creatures/actions.rs`:
 Action::Move(Vec3i)
 Action::ConsumeOrganic
 Action::Rest
+Action::EmitSound
+Action::Dig
+Action::Carry
+Action::Drop
 ```
 
-Selection: `choose_action()` — weighted random modulated by regulatory state. Not prediction-guided (planned in [08_prediction.md](08_prediction.md)).
+Selection: `choose_action()` — weighted random modulated by regulatory state and memory predictions ([08_prediction.md](08_prediction.md)).
 
 Researchers may describe `ConsumeOrganic` as "eating" in analysis. The code uses no food concept.
 
@@ -269,7 +273,7 @@ Researchers may describe emergent roles — **explorers**, **builders**, **aggre
 | `creature.rs` | `Creature`, `Experience`, experience buffer |
 | `genome.rs` | `Genome` defaults |
 | `regulation.rs` | Passive drain, action costs, clamping |
-| `actions.rs` | `Action` enum, `choose_action`, `apply_action` |
+| `actions.rs` | `Action` enum (move, rest, consume, sound, dig, carry, drop), `choose_action`, `apply_action` |
 | `sensors.rs` | `read_sensors` (see 04) |
 
 Tick integration: `sim-core/src/simulation/engine.rs` — sense → regulate → act → sense → experience → memory.
@@ -277,7 +281,7 @@ Tick integration: `sim-core/src/simulation/engine.rs` — sense → regulate →
 ## Planned
 
 - Full lifecycle (growth, reproduction, death)
-- Extended actions (drink, carry, drop, dig, place, sound, follow, push)
+- Extended actions (drink, place, bind, follow, push)
 - Cognition cost for memory/prediction
 - Integrity damage from environment and collapse
 - Prediction-guided action selection

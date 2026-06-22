@@ -115,15 +115,17 @@ Over long timescales, infrastructure feeds back into geology (erosion, load, col
 | Field / struct | Location | Status |
 |----------------|----------|--------|
 | `binder` | `world/voxel.rs` | Field present |
-| `carried_mass` | `creatures/regulation.rs` | Field present |
-| Dig / carry / place / bind | `creatures/actions.rs` | Not implemented |
-| Load / collapse interaction | `world/` | Planned |
+| `carried_mass` | `creatures/regulation.rs` | Active; exported in `CreatureSnapshot` |
+| Dig / carry / drop | `creatures/actions.rs` | **Implemented** — voxel field changes only |
+| Trail wear on `Move` | `world/physics.rs` | `apply_trail_wear` — solid↓, porosity↑ (capped) |
+| Place / bind / stack | `creatures/actions.rs` | Planned |
+| Load / collapse interaction | `world/physics.rs` | `tick_load_physics` on erosion ticks |
+| Per-tick action counts | `export/logs.rs` | `dig_count`, `carry_count`, `drop_count`, `move_count` |
 
 ## Planned
 
-- Full construction action set in `actions.rs`
+- Place and bind actions
 - Binder production (organism metabolite → voxel `binder`)
-- Pathway compaction from repeated `Move`
 - Export infrastructure maps in [17_analysis_and_visualization.md](17_analysis_and_visualization.md)
 
 ## Open questions

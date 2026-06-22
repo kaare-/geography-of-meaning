@@ -3,10 +3,26 @@ use std::collections::{HashMap, HashSet};
 use super::chunk::{Chunk, ChunkCoord};
 use super::voxel::{idx, CHUNK_SIZE};
 
+use super::voxel::VoxelViewMut;
+
 const UNIT_WEIGHT: f32 = 0.4;
 const COLLAPSE_SOLID_REDUCTION: f32 = 0.12;
 const COLLAPSE_VOID_INCREASE: f32 = 0.08;
 const COLLAPSE_EROSION_BUMP: f32 = 0.04;
+
+pub const TRAIL_SOLID_REDUCTION: f32 = 0.008;
+pub const TRAIL_POROSITY_INCREASE: f32 = 0.012;
+pub const TRAIL_MAX_POROSITY: f32 = 0.85;
+pub const TRAIL_MIN_SOLID: f32 = 0.05;
+
+/// Compacts surface voxels traversed by movement — field changes only, no labels.
+pub fn apply_trail_wear(voxel: &mut VoxelViewMut<'_>) {
+    if *voxel.solid_fraction > TRAIL_MIN_SOLID {
+        *voxel.solid_fraction =
+            (*voxel.solid_fraction - TRAIL_SOLID_REDUCTION).max(TRAIL_MIN_SOLID);
+    }
+    *voxel.porosity = (*voxel.porosity + TRAIL_POROSITY_INCREASE).min(TRAIL_MAX_POROSITY);
+}
 
 /// Propagate load downward through solid columns and collapse overloaded voxels.
 pub fn tick_load_physics(

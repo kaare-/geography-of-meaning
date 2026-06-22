@@ -3,9 +3,9 @@ use rand::{Rng, SeedableRng};
 
 use crate::creatures::{
     apply_action, choose_action, deposit_creature_organic, read_sensors_with_noise,
-    try_reproduce, Creature, DeathEvent, Experience, REPRODUCTION_ENERGY_COST,
+    try_reproduce, Action, Creature, DeathEvent, Experience, REPRODUCTION_ENERGY_COST,
 };
-use crate::export::logs::TickLogEntry;
+use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
 use crate::world::World;
 
@@ -87,9 +87,11 @@ impl Simulation {
 
         let mut deaths = Vec::new();
         let mut surviving = Vec::with_capacity(self.creatures.len());
+        let mut concepts_formed = 0u32;
+        let mut action_counts = ActionCounts::default();
 
         for mut creature in self.creatures.drain(..) {
-            creature.update_sleep();
+            concepts_formed += creature.update_sleep();
             creature.try_enter_sleep();
 
             let sensory_before = creature.sensor;
@@ -115,6 +117,13 @@ impl Simulation {
 
             let action = choose_action(&creature, &mut self.rng, sleeping);
             let _ = apply_action(&mut creature, action, &mut self.world);
+            match action {
+                Action::Move(_) => action_counts.move_count += 1,
+                Action::Dig => action_counts.dig_count += 1,
+                Action::Carry => action_counts.carry_count += 1,
+                Action::Drop => action_counts.drop_count += 1,
+                _ => {}
+            }
 
             creature.regulatory.apply_passive_hydration(&creature.sensor);
 
@@ -209,6 +218,8 @@ impl Simulation {
                 .collect(),
             deaths,
             births,
+            concepts_formed,
+            action_counts,
             creatures: self
                 .creatures
                 .iter()

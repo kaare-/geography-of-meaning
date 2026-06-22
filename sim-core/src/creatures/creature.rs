@@ -78,7 +78,7 @@ impl Creature {
         }
     }
 
-    pub fn update_sleep(&mut self) {
+    pub fn update_sleep(&mut self) -> u32 {
         if self.sleep.sleeping {
             if self.sleep.ticks_remaining > 0 {
                 self.sleep.ticks_remaining -= 1;
@@ -87,6 +87,7 @@ impl Creature {
                 let new_concepts = self
                     .memory_graph
                     .consolidate_sleep(&self.recent_experience, &mut self.next_concept_id);
+                let formed = new_concepts.len() as u32;
                 for concept in new_concepts {
                     if !self.concept_nodes.contains(&concept.id) {
                         self.concept_nodes.push(concept.id);
@@ -94,8 +95,10 @@ impl Creature {
                     }
                 }
                 self.sleep.sleeping = false;
+                return formed;
             }
         }
+        0
     }
 
     pub fn try_enter_sleep(&mut self) {

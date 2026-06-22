@@ -28,6 +28,14 @@ impl SoundEventSnapshot {
     }
 }
 
+#[derive(Debug, Default, Serialize)]
+pub struct ActionCounts {
+    pub move_count: u32,
+    pub dig_count: u32,
+    pub carry_count: u32,
+    pub drop_count: u32,
+}
+
 #[derive(Debug, Serialize)]
 pub struct TickLogEntry {
     pub tick: u64,
@@ -37,5 +45,7 @@ pub struct TickLogEntry {
     pub sound_events: Vec<SoundEventSnapshot>,
     pub deaths: Vec<DeathEvent>,
     pub births: Vec<BirthEvent>,
+    pub concepts_formed: u32,
+    pub action_counts: ActionCounts,
     pub creatures: Vec<CreatureSnapshot>,
 }
