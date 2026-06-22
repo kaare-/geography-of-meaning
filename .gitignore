@@ -1,0 +1,14 @@
+/target/
+**/*.rs.bk
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Exports (keep directory structure)
+exports/snapshots/*.json
+exports/logs/*.jsonl
