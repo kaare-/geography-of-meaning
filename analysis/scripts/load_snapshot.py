@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Load and summarize a world snapshot export."""
 
+from typing import Optional
 import argparse
 import json
 import sys
@@ -38,7 +39,7 @@ def summarize_tick_log(entries: list[dict]) -> None:
     print(f"Sound events:     {total_sounds} (sum of per-tick counts)")
 
 
-def summarize(data: dict) -> None:
+def summarize(data: dict, snapshot_path: Optional[Path] = None) -> None:
     chunks = data.get("chunks", [])
     creatures = data.get("creatures", [])
     print(f"Time:      {data.get('time')}")
@@ -64,10 +65,13 @@ def summarize(data: dict) -> None:
         if by_type:
             print(f"  memory by type: {by_type}")
 
-    memory_glob = path.parent.glob("memory_creature_*.json")
-    memory_files = sorted(memory_glob, key=lambda p: p.name)
-    if memory_files:
-        print(f"Memory graph export: {memory_files[0]}")
+    if snapshot_path is not None:
+        memory_files = sorted(
+            snapshot_path.parent.glob("memory_creature_*.json"),
+            key=lambda p: p.name,
+        )
+        if memory_files:
+            print(f"Memory graph export: {memory_files[0]}")
 
 
 def plot_slice(data: dict, field: str = "organic") -> None:
@@ -112,7 +116,7 @@ def main() -> None:
         sys.exit(1)
 
     data = load_snapshot(path)
-    summarize(data)
+    summarize(data, path)
 
     tick_log_path = Path(args.tick_log) if args.tick_log else path.parent.parent / "logs" / "tick_log.jsonl"
     if tick_log_path.exists():
