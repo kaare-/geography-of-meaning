@@ -12,11 +12,11 @@ pub const DEATH_ORGANIC_DEPOSIT: f32 = 0.08;
 
 pub const REPRODUCTION_ENERGY_THRESHOLD: f32 = 0.6;
 pub const REPRODUCTION_CHANCE_PER_TICK: f32 = 0.02;
-pub const REPRODUCTION_CHANCE_HIGH_ENERGY: f32 = 0.04;
+pub const REPRODUCTION_CHANCE_HIGH_ENERGY: f32 = 0.025;
 pub const REPRODUCTION_HIGH_ENERGY_THRESHOLD: f32 = 0.6;
 pub const ENERGY_DEPLETION_GRACE_TICKS: u8 = 3;
 pub const REPRODUCTION_ENERGY_COST: f32 = 0.25;
-pub const DEFAULT_MAX_POPULATION: usize = 50;
+pub const DEFAULT_MAX_POPULATION: usize = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeathCause {

@@ -338,19 +338,19 @@ It is a collection of predictive structures distributed across:
 | Spawn at favorable voxels | `world/mod.rs` `find_spawn_positions` | Implemented |
 | `Creature::new` | `creatures/creature.rs` | Implemented |
 | `age` increment | `simulation/engine.rs` | Implemented |
-| `Genome` defaults + `mutate_from` | `creatures/genome.rs` | Implemented |
+| `Genome` defaults + `mutate_from` | `creatures/genome.rs` | `metabolism_rate` default `0.008` |
 | Reproduction | `creatures/lifecycle.rs` `try_reproduce` | Implemented |
+| High-energy reproduction chance | `lifecycle.rs` | `2.5%` per tick when energy > `0.6` |
 | Death / removal | `lifecycle.rs`, `engine.rs` | Implemented |
 | Organic recycling on death | `lifecycle.rs` `deposit_creature_organic` | Implemented |
 | Birth events in tick log | `export/logs.rs` | Implemented |
-| Population cap | `scheduler.rs` `max_population` | Implemented |
+| Population cap | `scheduler.rs` `max_population` | Default `30` |
 | Aging effects | — | Planned |
 | Population aggregates | — | Planned |
 
 ## Planned
 
-- Reproduction with energy cost and genome mutation
-- Death triggers (regulatory failure, integrity, age)
+- Death triggers beyond regulatory failure (age)
 - Aging modifiers on mobility, repair, metabolism
 - Ecological recycling into voxel organic fields
 - Density-dependent behavior coupling

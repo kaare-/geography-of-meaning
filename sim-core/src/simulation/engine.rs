@@ -3,7 +3,8 @@ use rand::{Rng, SeedableRng};
 
 use crate::creatures::{
     apply_action, choose_action, deposit_creature_organic, read_sensors_with_noise,
-    try_reproduce, Action, Creature, DeathEvent, Experience, REPRODUCTION_ENERGY_COST,
+    resolve_position_overlaps, try_creature_move_at, try_creature_push_at, try_reproduce,
+    Action, Creature, DeathEvent, Experience, REPRODUCTION_ENERGY_COST,
 };
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
@@ -33,7 +34,8 @@ impl Simulation {
         for (i, pos) in spawn_positions.iter().enumerate() {
             let signature = rng.gen::<u64>();
             let mut creature = Creature::new(i as u64 + 1, *pos, signature);
-            creature.sensor = read_sensors_with_noise(&creature, &world, &mut rng, 1.0);
+            creature.sensor =
+                read_sensors_with_noise(&creature, &world, &creatures, &mut rng, 1.0);
             creatures.push(creature);
         }
 
@@ -88,12 +90,23 @@ impl Simulation {
         let erosion_damage_tick = self.config.erosion_tick_interval > 0
             && timestamp % self.config.erosion_tick_interval == 0;
 
+        let creature_count = self.creatures.len();
+        let mut chosen_actions = Vec::with_capacity(creature_count);
+        for creature in &self.creatures {
+            let sleeping = creature.sleep.sleeping;
+            chosen_actions.push(choose_action(creature, &mut self.rng, sleeping));
+        }
+
         let mut deaths = Vec::new();
-        let mut surviving = Vec::with_capacity(self.creatures.len());
+        let mut surviving = Vec::with_capacity(creature_count);
         let mut concepts_formed = 0u32;
         let mut action_counts = ActionCounts::default();
+        let mut push_events = Vec::new();
 
-        for mut creature in self.creatures.drain(..) {
+        for idx in 0..creature_count {
+            let action = chosen_actions[idx];
+            let mut creature = self.creatures[idx].clone();
+
             concepts_formed += creature.update_sleep();
             creature.try_enter_sleep();
 
@@ -118,21 +131,49 @@ impl Simulation {
                 }
             }
 
-            let action = choose_action(&creature, &mut self.rng, sleeping);
-            let _ = apply_action(&mut creature, action, &mut self.world);
             match action {
-                Action::Move(_) => action_counts.move_count += 1,
-                Action::Dig => action_counts.dig_count += 1,
-                Action::Carry => action_counts.carry_count += 1,
-                Action::Drop => action_counts.drop_count += 1,
-                _ => {}
+                Action::Move(delta) => {
+                    if try_creature_move_at(&mut self.creatures, idx, delta, &mut self.world) {
+                        creature.position = self.creatures[idx].position;
+                        creature.regulatory = self.creatures[idx].regulatory;
+                        action_counts.move_count += 1;
+                    }
+                }
+                Action::Push(delta) => {
+                    if let Some(event) =
+                        try_creature_push_at(&mut self.creatures, idx, delta, &mut self.world)
+                    {
+                        creature.position = self.creatures[idx].position;
+                        creature.regulatory = self.creatures[idx].regulatory;
+                        push_events.push(event);
+                        action_counts.push_count += 1;
+                    }
+                }
+                _ => {
+                    let _ = apply_action(&mut creature, action, &mut self.world);
+                    self.creatures[idx].regulatory = creature.regulatory;
+                    self.creatures[idx].position = creature.position;
+                    match action {
+                        Action::Dig => action_counts.dig_count += 1,
+                        Action::Carry => action_counts.carry_count += 1,
+                        Action::Drop => action_counts.drop_count += 1,
+                        Action::PlaceMaterial => action_counts.place_material_count += 1,
+                        Action::ApplyBinder => action_counts.apply_binder_count += 1,
+                        _ => {}
+                    }
+                }
             }
 
             creature.regulatory.apply_passive_hydration(&creature.sensor);
 
             let noise_mult = if sleeping { 0.25 } else { 1.0 };
-            creature.sensor =
-                read_sensors_with_noise(&creature, &self.world, &mut self.rng, noise_mult);
+            creature.sensor = read_sensors_with_noise(
+                &creature,
+                &self.world,
+                &self.creatures,
+                &mut self.rng,
+                noise_mult,
+            );
             if !sleeping {
                 let heard = creature
                     .sensor
@@ -176,10 +217,12 @@ impl Simulation {
                 creature.memory_graph.record_experience(&exp);
             }
             creature.push_experience(exp);
+            self.creatures[idx] = creature.clone();
             surviving.push(creature);
         }
 
         self.creatures = surviving;
+        resolve_position_overlaps(&mut self.creatures, &self.world);
 
         let mut births = Vec::new();
         let mut new_offspring = Vec::new();
@@ -198,8 +241,13 @@ impl Simulation {
                 births.push(birth);
                 reproduction_parents.push(idx);
                 let mut offspring = offspring;
-                offspring.sensor =
-                    read_sensors_with_noise(&offspring, &self.world, &mut self.rng, 1.0);
+                offspring.sensor = read_sensors_with_noise(
+                    &offspring,
+                    &self.world,
+                    &self.creatures,
+                    &mut self.rng,
+                    1.0,
+                );
                 new_offspring.push(offspring);
             }
         }
@@ -229,6 +277,7 @@ impl Simulation {
             births,
             concepts_formed,
             action_counts,
+            push_events,
             creatures: self
                 .creatures
                 .iter()

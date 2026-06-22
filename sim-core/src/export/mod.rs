@@ -8,6 +8,7 @@ use thiserror::Error;
 use crate::simulation::Simulation;
 
 pub mod logs;
+pub mod memory_dump;
 pub mod snapshots;
 
 #[derive(Debug, Error)]
@@ -45,6 +46,7 @@ pub fn export_all(sim: &Simulation, output_dir: &Path) -> Result<(), ExportError
     let log_path = output_dir.join("logs/tick_log.jsonl");
     write_snapshot(sim, &snapshot_path)?;
     write_tick_log(sim, &log_path)?;
+    let _ = memory_dump::export_memory_for_sim(sim, output_dir)?;
     Ok(())
 }
 

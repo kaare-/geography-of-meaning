@@ -4,7 +4,7 @@
 
 ## Status
 
-**Stub** — voxel `binder` field and creature `carried_mass` exist; dig, carry, stack, place, and bind actions are **planned**. No construction tick logic in skeleton.
+**Partial** — voxel `binder` field and creature `carried_mass` exist; dig, carry, drop, `PlaceMaterial`, and `ApplyBinder` are implemented. Stack and dedicated bind production are **planned**.
 
 > **Researcher framing:** All examples below (shelter, cache, wall, bridge, settlement, trail) describe **emergent patterns** and **externalized prediction** — not hardcoded world types, voxel categories, or creature cognition concepts.
 
@@ -42,15 +42,16 @@ None of these labels exist in simulation code.
 
 ## Construction
 
-Planned action families:
+Implemented action families:
 
 | Action | Effect |
 |--------|--------|
 | Dig | Remove solid fraction, increase void |
 | Carry | Transfer material to `carried_mass` |
-| Drop / place | Deposit carried mass at voxel |
-| Stack | Increase local solid fraction vertically |
-| Bind | Add `binder`, increase `structural_strength` |
+| Drop | Deposit carried mass at adjacent void voxel |
+| PlaceMaterial | Deposit carried mass as organic + binder; slight `solid_fraction` increase |
+| ApplyBinder | Consume organic from voxel or carried mass; raise `binder` and `structural_strength` |
+| Stack | Increase local solid fraction vertically — **planned** |
 
 All modifications obey standard material physics — no "built" material type.
 
@@ -116,15 +117,17 @@ Over long timescales, infrastructure feeds back into geology (erosion, load, col
 |----------------|----------|--------|
 | `binder` | `world/voxel.rs` | Field present |
 | `carried_mass` | `creatures/regulation.rs` | Active; exported in `CreatureSnapshot` |
-| Dig / carry / drop | `creatures/actions.rs` | **Implemented** — voxel field changes only |
+| Dig / carry / drop | `creatures/actions.rs` | Implemented |
+| `PlaceMaterial` | `creatures/actions.rs` | Organic + binder deposit; solid fraction bump |
+| `ApplyBinder` | `creatures/actions.rs` | Organic cost; binder + structural_strength |
 | Trail wear on `Move` | `world/physics.rs` | `apply_trail_wear` — solid↓, porosity↑ (capped) |
-| Place / bind / stack | `creatures/actions.rs` | Planned |
+| Stack | — | Planned |
 | Load / collapse interaction | `world/physics.rs` | `tick_load_physics` on erosion ticks |
-| Per-tick action counts | `export/logs.rs` | `dig_count`, `carry_count`, `drop_count`, `move_count` |
+| Per-tick action counts | `export/logs.rs` | `dig_count`, `carry_count`, `drop_count`, `place_material_count`, `apply_binder_count`, `move_count` |
 
 ## Planned
 
-- Place and bind actions
+- Stack action
 - Binder production (organism metabolite → voxel `binder`)
 - Export infrastructure maps in [17_analysis_and_visualization.md](17_analysis_and_visualization.md)
 

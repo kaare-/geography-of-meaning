@@ -1,8 +1,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::math::{Vec3f, Vec3i};
-use crate::world::physics::apply_trail_wear;
+use crate::math::Vec3i;
 use crate::world::{SoundEvent, World};
 
 use super::creature::Creature;
@@ -10,24 +9,30 @@ use super::creature::Creature;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Action {
     Move(Vec3i),
+    Push(Vec3i),
     ConsumeOrganic,
     Rest,
     EmitSound,
     Dig,
     Carry,
     Drop,
+    PlaceMaterial,
+    ApplyBinder,
 }
 
 impl Action {
     pub fn label(&self) -> &'static str {
         match self {
             Action::Move(_) => "move",
+            Action::Push(_) => "push",
             Action::ConsumeOrganic => "consume_organic",
             Action::Rest => "rest",
             Action::EmitSound => "emit_sound",
             Action::Dig => "dig",
             Action::Carry => "carry",
             Action::Drop => "drop",
+            Action::PlaceMaterial => "place_material",
+            Action::ApplyBinder => "apply_binder",
         }
     }
 }
@@ -44,8 +49,24 @@ const CARRY_ENERGY_COST: f32 = 0.04;
 const CARRY_FATIGUE_COST: f32 = 0.08;
 const DROP_ENERGY_COST: f32 = 0.03;
 const DROP_FATIGUE_COST: f32 = 0.05;
+const PLACE_MATERIAL_ENERGY_COST: f32 = 0.05;
+const PLACE_MATERIAL_FATIGUE_COST: f32 = 0.1;
+const APPLY_BINDER_ENERGY_COST: f32 = 0.06;
+const APPLY_BINDER_FATIGUE_COST: f32 = 0.12;
+const BINDER_ORGANIC_COST: f32 = 0.04;
 
 pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping: bool) -> Action {
+    let push_dir = Vec3i::new(
+        rng.gen_range(-1..=1),
+        rng.gen_range(-1..=1),
+        rng.gen_range(-1..=1),
+    );
+    let move_dir = Vec3i::new(
+        rng.gen_range(-1..=1),
+        rng.gen_range(-1..=1),
+        rng.gen_range(-1..=1),
+    );
+
     let mut weights = if sleeping {
         vec![
             (Action::ConsumeOrganic, 1.0f32),
@@ -54,23 +75,21 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
             (Action::Dig, 0.2),
             (Action::Carry, 0.3),
             (Action::Drop, 0.4),
+            (Action::PlaceMaterial, 0.15),
+            (Action::ApplyBinder, 0.1),
         ]
     } else {
         vec![
-            (
-                Action::Move(Vec3i::new(
-                    rng.gen_range(-1..=1),
-                    rng.gen_range(-1..=1),
-                    rng.gen_range(-1..=1),
-                )),
-                1.0f32,
-            ),
+            (Action::Move(move_dir), 1.0f32),
+            (Action::Push(push_dir), 0.25),
             (Action::ConsumeOrganic, 1.0),
             (Action::Rest, 1.0),
             (Action::EmitSound, EMIT_SOUND_BASE_WEIGHT),
             (Action::Dig, 0.5),
             (Action::Carry, 0.6),
             (Action::Drop, 0.4),
+            (Action::PlaceMaterial, 0.35),
+            (Action::ApplyBinder, 0.3),
         ]
     };
 
@@ -110,6 +129,19 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Drop)) {
             weights[i].1 += 1.5 + creature.regulatory.carried_mass;
         }
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::PlaceMaterial)) {
+            weights[i].1 += creature.regulatory.carried_mass;
+        }
+    }
+    if creature.sensor.contact_occupied > 0.3 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Push(_))) {
+            weights[i].1 += creature.sensor.contact_occupied * 2.0;
+        }
+    }
+    if creature.sensor.chemical_binder > 0.05 || creature.regulatory.carried_mass > 0.1 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::ApplyBinder)) {
+            weights[i].1 += creature.sensor.chemical_binder + 0.3;
+        }
     }
 
     if !sleeping && rng.gen::<f32>() >= EXPLORATION_RATE {
@@ -121,12 +153,15 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
         for (action, weight) in &mut weights {
             let predicted = match action {
                 Action::Move(_) => predictions.move_delta,
+                Action::Push(_) => predictions.push_delta,
                 Action::ConsumeOrganic => predictions.consume_delta,
                 Action::Rest => predictions.rest_delta,
                 Action::EmitSound => predictions.emit_sound_delta,
                 Action::Dig => predictions.dig_delta,
                 Action::Carry => predictions.carry_delta,
                 Action::Drop => predictions.drop_delta,
+                Action::PlaceMaterial => predictions.place_material_delta,
+                Action::ApplyBinder => predictions.apply_binder_delta,
             };
             if predicted > 0.0 {
                 *weight += predicted * PREDICTION_WEIGHT;
@@ -149,26 +184,7 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
 
 pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) -> bool {
     match action {
-        Action::Move(delta) => {
-            let target = creature.position.floor_i();
-            let speed = creature.genome.move_speed;
-            let new_pos = Vec3i::new(
-                target.x + delta.x,
-                target.y + delta.y,
-                target.z + delta.z,
-            );
-            if let Some(voxel) = world.sample_voxel(new_pos) {
-                if voxel.void_fraction > 0.4 {
-                    creature.position = Vec3f::from_vec3i(new_pos);
-                    creature.regulatory.apply_action_cost(0.035 * speed, 0.08);
-                    if let Some(mut surface) = world.sample_voxel_mut(new_pos) {
-                        apply_trail_wear(&mut surface);
-                    }
-                    return true;
-                }
-            }
-            false
-        }
+        Action::Move(_) | Action::Push(_) => false,
         Action::ConsumeOrganic => {
             let pos = creature.position.floor_i();
             let wet_trace = creature.sensor.chemical_wet_mineral;
@@ -303,6 +319,91 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                 }
             }
             false
+        }
+        Action::PlaceMaterial => {
+            if creature.regulatory.carried_mass < 0.02 {
+                return false;
+            }
+            let pos = creature.position.floor_i();
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    for dz in -1..=1 {
+                        if dx == 0 && dy == 0 && dz == 0 {
+                            continue;
+                        }
+                        let check = Vec3i::new(pos.x + dx, pos.y + dy, pos.z + dz);
+                        if let Some(voxel) = world.sample_voxel_mut(check) {
+                            if *voxel.void_fraction > 0.35 {
+                                let deposit = creature.regulatory.carried_mass.min(0.06);
+                                let organic_part = deposit * 0.7;
+                                let binder_part = deposit * 0.3;
+                                *voxel.organic = (*voxel.organic + organic_part).min(1.0);
+                                *voxel.binder = (*voxel.binder + binder_part).min(1.0);
+                                *voxel.solid_fraction =
+                                    (*voxel.solid_fraction + deposit * 0.15).min(1.0);
+                                *voxel.void_fraction =
+                                    (*voxel.void_fraction - deposit * 0.1).max(0.0);
+                                creature.regulatory.carried_mass -= deposit;
+                                creature.regulatory.apply_action_cost(
+                                    PLACE_MATERIAL_ENERGY_COST,
+                                    PLACE_MATERIAL_FATIGUE_COST,
+                                );
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+        Action::ApplyBinder => {
+            let pos = creature.position.floor_i();
+            let mut organic_source = None;
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    for dz in -1..=1 {
+                        let check = Vec3i::new(pos.x + dx, pos.y + dy, pos.z + dz);
+                        if let Some(voxel) = world.sample_voxel(check) {
+                            if voxel.organic > BINDER_ORGANIC_COST {
+                                organic_source = Some(check);
+                                break;
+                            }
+                        }
+                    }
+                    if organic_source.is_some() {
+                        break;
+                    }
+                }
+                if organic_source.is_some() {
+                    break;
+                }
+            }
+
+            let from_carried = organic_source.is_none()
+                && creature.regulatory.carried_mass >= BINDER_ORGANIC_COST;
+
+            if organic_source.is_none() && !from_carried {
+                return false;
+            }
+
+            let target = organic_source.unwrap_or(pos);
+            if let Some(voxel) = world.sample_voxel_mut(target) {
+                if from_carried {
+                    creature.regulatory.carried_mass -= BINDER_ORGANIC_COST;
+                } else {
+                    *voxel.organic -= BINDER_ORGANIC_COST;
+                }
+                *voxel.binder = (*voxel.binder + 0.08).min(1.0);
+                *voxel.structural_strength =
+                    (*voxel.structural_strength + 0.05).min(1.5);
+                creature.regulatory.apply_action_cost(
+                    APPLY_BINDER_ENERGY_COST,
+                    APPLY_BINDER_FATIGUE_COST,
+                );
+                true
+            } else {
+                false
+            }
         }
     }
 }

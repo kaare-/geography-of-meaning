@@ -4,8 +4,13 @@ pub mod genome;
 pub mod lifecycle;
 pub mod regulation;
 pub mod sensors;
+pub mod spatial;
 
 pub use actions::{apply_action, choose_action, Action};
+pub use spatial::{
+    push_strength, resolve_position_overlaps, try_creature_move_at, try_creature_push_at,
+    PushEvent,
+};
 pub use creature::{Creature, Experience, MAX_RECENT_EXPERIENCE, SleepState};
 pub use genome::Genome;
 pub use lifecycle::{

@@ -58,6 +58,13 @@ fn main() {
         .count();
     let total_sounds: usize = sim.tick_logs.iter().map(|e| e.sound_event_count).sum();
     let concept_total: usize = sim.creatures.iter().map(|c| c.concepts.len()).sum();
+    let sample_creature = sim.creatures.iter().min_by_key(|c| c.id);
+    let memory_path = sample_creature.map(|c| {
+        output_dir
+            .join(format!("snapshots/memory_creature_{}.json", c.id))
+            .display()
+            .to_string()
+    });
 
     println!("Simulation complete.");
     println!("  Ticks:         {}", config.ticks);
@@ -70,4 +77,7 @@ fn main() {
     println!("  Chunks:        {}", sim.world.chunks.len());
     println!("  Snapshot:      {}", snapshot_path.display());
     println!("  Log:           {}", log_path.display());
+    if let Some(mem) = memory_path {
+        println!("  Memory export: {mem}");
+    }
 }

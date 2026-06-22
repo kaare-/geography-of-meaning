@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::creatures::DeathEvent;
 use crate::creatures::lifecycle::BirthEvent;
+use crate::creatures::spatial::PushEvent;
 use crate::export::snapshots::CreatureSnapshot;
 use crate::world::SoundEvent;
 
@@ -31,9 +32,12 @@ impl SoundEventSnapshot {
 #[derive(Debug, Default, Serialize)]
 pub struct ActionCounts {
     pub move_count: u32,
+    pub push_count: u32,
     pub dig_count: u32,
     pub carry_count: u32,
     pub drop_count: u32,
+    pub place_material_count: u32,
+    pub apply_binder_count: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -47,5 +51,7 @@ pub struct TickLogEntry {
     pub births: Vec<BirthEvent>,
     pub concepts_formed: u32,
     pub action_counts: ActionCounts,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub push_events: Vec<PushEvent>,
     pub creatures: Vec<CreatureSnapshot>,
 }

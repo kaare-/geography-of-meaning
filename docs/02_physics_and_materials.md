@@ -64,7 +64,7 @@ Transported by water flow, organism movement, and deposition. Shares the same fr
 
 Organism-produced substance increasing strength, erosion resistance, and adhesion. Enables emergent architecture.
 
-**Skeleton:** `binder` field present; no production or deposition logic yet.
+**Skeleton:** `binder` field present; `PlaceMaterial` and `ApplyBinder` deposit and strengthen binder via creature actions.
 
 ## Emergent Architecture
 
@@ -81,7 +81,6 @@ Structures built by creatures obey the same material rules as natural geology. N
 ## Planned
 
 - Erosion-driven porosity and strength reduction beyond collapse
-- Binder production and deposition via creature actions
 - Avalanche / loose-material transport
 
 ## Open questions

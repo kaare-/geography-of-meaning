@@ -90,12 +90,13 @@ impl SensorState {
 }
 
 pub fn read_sensors<R: Rng + ?Sized>(creature: &Creature, world: &World, rng: &mut R) -> SensorState {
-    read_sensors_with_noise(creature, world, rng, 1.0)
+    read_sensors_with_noise(creature, world, &[], rng, 1.0)
 }
 
 pub fn read_sensors_with_noise<R: Rng + ?Sized>(
     creature: &Creature,
     world: &World,
+    other_creatures: &[Creature],
     rng: &mut R,
     noise_multiplier: f32,
 ) -> SensorState {
@@ -156,6 +157,22 @@ pub fn read_sensors_with_noise<R: Rng + ?Sized>(
         }
     }
 
+    let mut contact_occupied = 0.0f32;
+    let mut chemical_creature = 0.0f32;
+    for other in other_creatures {
+        if other.id == creature.id {
+            continue;
+        }
+        let other_pos = other.position.floor_i();
+        let dx = (other_pos.x - center.x).abs();
+        let dy = (other_pos.y - center.y).abs();
+        let dz = (other_pos.z - center.z).abs();
+        if dx <= 1 && dy <= 1 && dz <= 1 {
+            contact_occupied = contact_occupied.max(1.0);
+            chemical_creature = chemical_creature.max(0.15);
+        }
+    }
+
     let state = SensorState {
         light: ((light_sum / n) * diurnal) + gaussian_noise(rng) * noise_scale,
         thermal: thermal_gradient + gaussian_noise(rng) * noise_scale,
@@ -163,12 +180,12 @@ pub fn read_sensors_with_noise<R: Rng + ?Sized>(
         chemical_wet_mineral: (wet_mineral_sum / n) + gaussian_noise(rng) * noise_scale,
         chemical_decay: (decay_sum / n) + gaussian_noise(rng) * noise_scale,
         chemical_binder: (binder_sum / n) + gaussian_noise(rng) * noise_scale,
-        chemical_creature: 0.0,
+        chemical_creature: chemical_creature + gaussian_noise(rng) * noise_scale,
         sound_ambient: sound_ambient + gaussian_noise(rng).abs() * 0.05 * noise_scale,
         sound_calls: sound_calls + gaussian_noise(rng).abs() * 0.03 * noise_scale,
         contact_hard: contact_hard + gaussian_noise(rng) * noise_scale,
         contact_soft: contact_soft + gaussian_noise(rng) * noise_scale,
-        contact_occupied: 0.0,
+        contact_occupied: contact_occupied + gaussian_noise(rng) * noise_scale,
         internal_energy: creature.regulatory.energy,
         internal_temperature_stress: env_temp_stress,
         internal_hydration: creature.regulatory.hydration,

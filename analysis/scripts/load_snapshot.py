@@ -64,6 +64,11 @@ def summarize(data: dict) -> None:
         if by_type:
             print(f"  memory by type: {by_type}")
 
+    memory_glob = path.parent.glob("memory_creature_*.json")
+    memory_files = sorted(memory_glob, key=lambda p: p.name)
+    if memory_files:
+        print(f"Memory graph export: {memory_files[0]}")
+
 
 def plot_slice(data: dict, field: str = "organic") -> None:
     try:

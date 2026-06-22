@@ -17,12 +17,15 @@ const SPREAD_DECAY: f32 = 0.5;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ActionPredictions {
     pub move_delta: f32,
+    pub push_delta: f32,
     pub consume_delta: f32,
     pub rest_delta: f32,
     pub emit_sound_delta: f32,
     pub dig_delta: f32,
     pub carry_delta: f32,
     pub drop_delta: f32,
+    pub place_material_delta: f32,
+    pub apply_binder_delta: f32,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
@@ -249,12 +252,15 @@ impl MemoryGraph {
             let weight = edge.strength * edge.confidence * source_weight;
             match action {
                 Action::Move(_) => predictions.move_delta += predicted_delta * weight,
+                Action::Push(_) => predictions.push_delta += predicted_delta * weight,
                 Action::ConsumeOrganic => predictions.consume_delta += predicted_delta * weight,
                 Action::Rest => predictions.rest_delta += predicted_delta * weight,
                 Action::EmitSound => predictions.emit_sound_delta += predicted_delta * weight,
                 Action::Dig => predictions.dig_delta += predicted_delta * weight,
                 Action::Carry => predictions.carry_delta += predicted_delta * weight,
                 Action::Drop => predictions.drop_delta += predicted_delta * weight,
+                Action::PlaceMaterial => predictions.place_material_delta += predicted_delta * weight,
+                Action::ApplyBinder => predictions.apply_binder_delta += predicted_delta * weight,
             }
         }
         predictions
@@ -476,12 +482,15 @@ fn source_activation_weight(
 fn action_matches(a: Action, b: Action) -> bool {
     match (a, b) {
         (Action::Move(_), Action::Move(_)) => true,
+        (Action::Push(_), Action::Push(_)) => true,
         (Action::ConsumeOrganic, Action::ConsumeOrganic) => true,
         (Action::Rest, Action::Rest) => true,
         (Action::EmitSound, Action::EmitSound) => true,
         (Action::Dig, Action::Dig) => true,
         (Action::Carry, Action::Carry) => true,
         (Action::Drop, Action::Drop) => true,
+        (Action::PlaceMaterial, Action::PlaceMaterial) => true,
+        (Action::ApplyBinder, Action::ApplyBinder) => true,
         _ => false,
     }
 }

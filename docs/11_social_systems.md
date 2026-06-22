@@ -6,7 +6,7 @@
 
 ## Status
 
-**Stub / Planned** — no combat, theft, ownership, or reputation primitives in code. `Creature::signature` exists; `Move` may eventually displace others (planned). Trust emerges from memory edge confidence (planned).
+**Partial** — `Action::Push` displaces occupants when `push_strength` (move_speed + carried_mass) wins; engine blocks overlap and resolves conflicts. No combat, theft, or ownership primitives. Trust emerges from memory edge confidence (planned).
 
 ## Summary
 
@@ -31,7 +31,7 @@ No social layer bypasses physics or sensors.
 
 ## Pushing
 
-**Planned** — `Move` into an occupied void cell may displace another creature if morphology/mass favors it. Displacement costs energy and integrity for both parties. No "attack" action type.
+**Implemented** — `Action::Push(direction)` attempts entry into an occupied void cell. If pusher `push_strength` exceeds target, target is displaced to an adjacent free voxel and pusher occupies the cell. Both pay energy and fatigue. `Move` fails when the target cell is creature-occupied. `resolve_position_overlaps` runs each tick. Push events optionally appear in `tick_log.jsonl`. No attack action type.
 
 ## Costs of Conflict
 
@@ -90,14 +90,17 @@ Researchers may describe emergent labels: **trust**, **danger**, **ally**, **out
 | Component | Location | Status |
 |-----------|----------|--------|
 | `signature` | `creatures/creature.rs` | Per-creature ID at spawn |
-| `contact_occupied`, `chemical_creature` | `sensors.rs` | Always 0.0 in skeleton |
-| `Move` | `actions.rs` | No displacement |
+| `contact_occupied`, `chemical_creature` | `sensors.rs` | From adjacent creature positions |
+| `push_strength` | `creatures/spatial.rs` | `move_speed + carried_mass * 0.6` |
+| `Action::Push` | `creatures/actions.rs`, `spatial.rs` | Displacement when strength wins |
+| `Move` occupancy check | `spatial.rs` | Blocks entry into occupied voxels |
+| Overlap resolution | `spatial.rs` `resolve_position_overlaps` | End-of-tick separation |
+| Push events in tick log | `export/logs.rs` | Optional `push_events` array |
 | Edge `confidence` | `memory/edges.rs` | Trust proxy (unused socially) |
 | Combat / theft / ownership | — | Not implemented |
 
 ## Planned
 
-- Push via `Move` displacement
 - Per-signature memory subgraphs
 - Reputation from aggregated outcomes
 - Norm formation from population-stable edges

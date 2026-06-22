@@ -43,7 +43,7 @@ Selecting a creature should reveal:
 
 The goal is understanding subjective state.
 
-**Skeleton:** `CreatureSnapshot` in `export/snapshots.rs` exports `id`, `position`, regulatory scalars (`energy`, `hydration`, `temperature_stress`, `integrity`, `fatigue`), `age`, full `sensor` state, and `memory_nodes` / `memory_edges` counts. Morphology, active concepts, predictions, and experience history are **planned**.
+**Skeleton:** `CreatureSnapshot` in `export/snapshots.rs` exports `id`, `position`, regulatory scalars (`energy`, `hydration`, `temperature_stress`, `integrity`, `fatigue`, `carried_mass`), `age`, full `sensor` state, `memory_node_count` / `memory_edges` counts, `memory_nodes_by_type`, `concept_count`, and `active_concepts`. Full memory graph JSON for a sample creature in `export/memory_dump.rs`. Morphology, predictions, and experience history are **planned**.
 
 ## Sensor Inspector
 
@@ -75,7 +75,7 @@ Allows inspection of:
 * prediction chains
 * communication effects
 
-**Skeleton:** exports report `memory_nodes` and `memory_edges` counts only. Full graph serialization (GraphML or nested JSON) is **planned** ([06_memory.md](06_memory.md)).
+**Skeleton:** exports report `memory_nodes` and `memory_edges` counts in snapshots; full node/edge JSON via `memory_creature_{id}.json` (`export/memory_dump.rs`). GraphML export is **planned** ([06_memory.md](06_memory.md)).
 
 ## Concept Viewer
 
@@ -265,9 +265,10 @@ Simulation::run()
   → export_all(sim, output_dir)
     → write_snapshot → WorldSnapshot::from_simulation
     → write_tick_log → TickLogEntry per tick
+    → export_memory_for_sim → snapshots/memory_creature_{id}.json
 ```
 
-Implemented in `sim-core/src/export/mod.rs`, `snapshots.rs`, `logs.rs`.
+Implemented in `sim-core/src/export/mod.rs`, `snapshots.rs`, `logs.rs`, `memory_dump.rs`.
 
 ### Python tools
 
@@ -276,16 +277,17 @@ python analysis/scripts/load_snapshot.py exports/snapshots/world_final.json
 python analysis/scripts/load_snapshot.py --plot organic
 ```
 
-`load_snapshot.py` summarizes time, season, chunk count, creature count, and optionally plots a 2D field slice.
+`load_snapshot.py` summarizes time, season, chunk count, creature count, memory graph export path (`snapshots/memory_creature_*.json`), and optionally plots a 2D field slice.
 
 ## Current implementation
 
 | Tool | Location | Status |
 |------|----------|--------|
 | `WorldSnapshot` / `CreatureSnapshot` | `export/snapshots.rs` | Memory node counts by type, concept count, active concepts |
-| `TickLogEntry` | `export/logs.rs` | Births, deaths, `sound_event_count`, optional sound slice |
+| `MemoryGraphExport` | `export/memory_dump.rs` | Full nodes/edges for sample creature |
+| `TickLogEntry` | `export/logs.rs` | Births, deaths, `push_events`, action counts, sound slice |
 | `export_all()` | `export/mod.rs` | Implemented |
-| `load_snapshot.py` | `analysis/scripts/` | Snapshot + tick-log population/births/deaths |
+| `load_snapshot.py` | `analysis/scripts/` | Snapshot + tick-log summary; memory export path |
 | Creature inspector UI | — | Planned |
 | Memory graph viewer | — | Planned |
 | All specialized viewers | — | Planned |
@@ -295,7 +297,7 @@ python analysis/scripts/load_snapshot.py --plot organic
 
 ## Planned
 
-- Per-creature memory graph JSON / GraphML export
+- Per-creature memory graph GraphML export
 - Concept and prediction inspection endpoints
 - Communication and sound event logging
 - Settlement and infrastructure overlays on world slices

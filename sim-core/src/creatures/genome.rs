@@ -11,7 +11,7 @@ pub struct Genome {
 impl Default for Genome {
     fn default() -> Self {
         Self {
-            metabolism_rate: 0.007,
+            metabolism_rate: 0.008,
             sensor_noise_scale: 0.05,
             move_speed: 1.0,
         }
