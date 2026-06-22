@@ -6,6 +6,9 @@ use crate::world::TICKS_PER_DAY;
 /// Erosion and other slow geological processes run every N simulation ticks.
 pub const DEFAULT_EROSION_TICK_INTERVAL: u64 = 10;
 
+/// Deep `water_content` horizontal flow on active chunks.
+pub const GROUNDWATER_TICK_INTERVAL: u64 = 5;
+
 /// Small nudge applied to `erosion_damage` on active chunks each erosion tick.
 pub const EROSION_DAMAGE_NUDGE: f32 = 0.0001;
 

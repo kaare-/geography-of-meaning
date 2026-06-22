@@ -14,15 +14,17 @@ use std::collections::{HashMap, HashSet};
 
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rayon::prelude::*;
 
 use crate::math::{Vec3f, Vec3i};
+use crate::simulation::scheduler::GROUNDWATER_TICK_INTERVAL;
 
 use self::climate::{apply_climate_to_chunk, GlobalClimate};
 use self::event::WorldEvent;
 use self::material::{chunk_height_slice, fill_terrain, generate_height_map};
 use self::physics::tick_load_physics;
 use self::voxel::{idx, CHUNK_SIZE, VoxelView};
-use self::water::{apply_rain, surface_water_total, tick_water};
+use self::water::{apply_rain, flow_groundwater, surface_water_total, tick_water};
 
 /// Ticks per simulated day for diurnal phase stub.
 pub const TICKS_PER_DAY: u64 = 100;
@@ -97,19 +99,30 @@ impl World {
         self.day_phase = (self.time % TICKS_PER_DAY) as f32 / TICKS_PER_DAY as f32;
 
         let humidity = self.climate.humidity;
-        let coords: Vec<_> = self.active_chunks.iter().copied().collect();
-        let mut water_active = self.rain_chunks_this_tick.clone();
+        let climate = self.climate.clone();
+        let active_set = self.active_chunks.clone();
+        let rain_set = self.rain_chunks_this_tick.clone();
 
-        for coord in coords {
-            if let Some(chunk) = self.chunks.get_mut(&coord) {
+        let newly_water_active: Vec<ChunkCoord> = self
+            .chunks
+            .par_iter_mut()
+            .filter(|(coord, _)| active_set.contains(coord))
+            .filter_map(|(coord, chunk)| {
                 let before = surface_water_total(chunk);
-                apply_climate_to_chunk(&self.climate, chunk);
+                apply_climate_to_chunk(&climate, chunk);
                 tick_water(chunk, humidity);
                 let after = surface_water_total(chunk);
                 if (after - before).abs() > WATER_ACTIVITY_THRESHOLD {
-                    water_active.insert(coord);
+                    Some(*coord)
+                } else {
+                    None
                 }
-            }
+            })
+            .collect();
+
+        let mut water_active = rain_set;
+        for coord in newly_water_active {
+            water_active.insert(coord);
         }
 
         self.water_active_chunks = water_active;
@@ -117,17 +130,30 @@ impl World {
         self.time += 1;
     }
 
+    /// Horizontal `water_content` flow on active chunks every `GROUNDWATER_TICK_INTERVAL` ticks.
+    pub fn tick_groundwater(&mut self) {
+        if self.time % GROUNDWATER_TICK_INTERVAL != 0 {
+            return;
+        }
+        let active_set = self.active_chunks.clone();
+        self.chunks
+            .par_iter_mut()
+            .filter(|(coord, _)| active_set.contains(coord))
+            .for_each(|(_, chunk)| flow_groundwater(chunk));
+    }
+
     /// Slow geological tick: load propagation and collapse on active chunks.
     pub fn tick_erosion(&mut self, nudge: f32) {
-        tick_load_physics(&mut self.chunks, &self.active_chunks);
-        let coords: Vec<_> = self.active_chunks.iter().copied().collect();
-        for coord in coords {
-            if let Some(chunk) = self.chunks.get_mut(&coord) {
+        let active = self.active_chunks.clone();
+        tick_load_physics(&mut self.chunks, &active);
+        self.chunks
+            .par_iter_mut()
+            .filter(|(coord, _)| active.contains(coord))
+            .for_each(|(_, chunk)| {
                 for value in &mut chunk.fields.erosion_damage {
                     *value = (*value + nudge).min(1.0);
                 }
-            }
-        }
+            });
     }
 
     pub fn process_events(&mut self) {

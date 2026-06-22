@@ -43,6 +43,7 @@ python analysis/scripts/load_snapshot.py --plot organic
 | `export/logs.rs` | JSONL tick entries |
 | `export/mod.rs` | `export_all()` |
 | `analysis/scripts/load_snapshot.py` | Load and summarize |
+| `analysis/notebooks/explore_run.ipynb` | Population, organic heatmap, concept counts |
 
 ## Cross-references
 

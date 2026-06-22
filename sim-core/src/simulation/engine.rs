@@ -3,9 +3,9 @@ use rand::{Rng, SeedableRng};
 
 use crate::creatures::{
     apply_action, choose_action, compute_follow_direction, deposit_creature_organic,
-    read_sensors_with_noise, resolve_position_overlaps, try_creature_move_at,
-    try_creature_push_at, try_reproduce, Action, Creature, DeathEvent, Experience,
-    FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, REPRODUCTION_ENERGY_COST,
+    dominant_heard_signature, read_sensors_with_noise, resolve_position_overlaps,
+    try_creature_move_at, try_creature_push_at, try_reproduce, Action, Creature, DeathEvent,
+    Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, REPRODUCTION_ENERGY_COST,
 };
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
@@ -76,6 +76,7 @@ impl Simulation {
 
         if self.config.climate_water_every_tick {
             self.world.tick_climate_and_water();
+            self.world.tick_groundwater();
         }
 
         if self.config.erosion_tick_interval > 0
@@ -95,7 +96,13 @@ impl Simulation {
         let mut chosen_actions = Vec::with_capacity(creature_count);
         for creature in &self.creatures {
             let sleeping = creature.sleep.sleeping;
-            chosen_actions.push(choose_action(creature, &mut self.rng, sleeping));
+            let heard_signature = dominant_heard_signature(creature, &self.world);
+            chosen_actions.push(choose_action(
+                creature,
+                &mut self.rng,
+                sleeping,
+                heard_signature,
+            ));
         }
 
         let mut deaths = Vec::new();
@@ -196,7 +203,11 @@ impl Simulation {
                     .sensor
                     .sound_calls
                     .max(creature.sensor.sound_ambient);
-                creature.memory_graph.record_heard_sound(creature.sensor, heard);
+                if let Some(sig) = dominant_heard_signature(&creature, &self.world) {
+                    creature
+                        .memory_graph
+                        .record_heard_sound(creature.sensor, heard, sig);
+                }
             }
             creature.refresh_active_concepts();
             creature.regulatory.clamp();

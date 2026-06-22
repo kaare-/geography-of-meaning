@@ -96,7 +96,8 @@ Researchers may describe emergent labels: **trust**, **danger**, **ally**, **out
 | `Move` occupancy check | `spatial.rs` | Blocks entry into occupied voxels |
 | Overlap resolution | `spatial.rs` `resolve_position_overlaps` | End-of-tick separation |
 | Push events in tick log | `export/logs.rs` | Optional `push_events` array |
-| Edge `confidence` | `memory/edges.rs` | Trust proxy (unused socially) |
+| Edge `confidence` | `memory/edges.rs` | Trust proxy via sound→outcome paths and follow bias |
+| `trusted_signature_count` | `export/snapshots.rs` | Per-creature count of signatures with positive sound memory |
 | Combat / theft / ownership | — | Not implemented |
 
 ## Planned

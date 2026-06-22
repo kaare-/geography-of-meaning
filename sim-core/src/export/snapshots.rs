@@ -49,6 +49,7 @@ pub struct CreatureSnapshot {
     pub memory_nodes_by_type: MemoryNodeSummary,
     pub concept_count: usize,
     pub active_concepts: Vec<ActiveConcept>,
+    pub trusted_signature_count: usize,
 }
 
 impl CreatureSnapshot {
@@ -73,6 +74,7 @@ impl CreatureSnapshot {
             memory_nodes_by_type: creature.memory_graph.node_summary(),
             concept_count: creature.concepts.len(),
             active_concepts: creature.active_concepts.clone(),
+            trusted_signature_count: creature.memory_graph.trusted_signature_count(),
         }
     }
 }

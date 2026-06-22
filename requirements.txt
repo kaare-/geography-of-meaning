@@ -2,4 +2,4 @@ numpy
 pandas
 matplotlib
 jupyter
-pyarrow
+pyarrow<20

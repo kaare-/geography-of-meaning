@@ -19,4 +19,6 @@ pub use lifecycle::{
     REPRODUCTION_ENERGY_THRESHOLD,
 };
 pub use regulation::RegulatoryState;
-pub use sensors::{read_sensors, read_sensors_with_noise, SensorState};
+pub use sensors::{
+    dominant_heard_signature, read_sensors, read_sensors_with_noise, SensorState,
+};

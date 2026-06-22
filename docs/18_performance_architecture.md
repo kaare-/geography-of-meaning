@@ -4,7 +4,7 @@
 
 ## Status
 
-**Partial** — data-oriented design and multithreading-ready structure; parallel updates not yet enabled.
+**Partial** — data-oriented design and multithreading-ready structure; parallel active-chunk field updates enabled via `rayon`.
 
 ## Principles
 
@@ -21,13 +21,13 @@
 | SoA voxels | Implemented |
 | Chunk grid | Implemented |
 | Active chunk set | Populated; full update in skeleton |
-| `rayon` dependency | Present, unused |
+| `rayon` dependency | Used for parallel active-chunk climate/water/groundwater/erosion |
 | JSON export | Slice + final snapshot |
-| Single-threaded tick | Implemented |
+| Single-threaded creature tick | Implemented |
+| Parallel chunk field updates | `par_iter_mut` on active chunks in `world/mod.rs`, `physics.rs` |
 
 ## Planned
 
-- Parallel per-chunk climate/water updates
 - GPU field updates for large worlds
 - Incremental / streaming serialization
 - Memory graph compression for scale

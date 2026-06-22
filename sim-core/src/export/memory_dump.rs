@@ -55,7 +55,7 @@ fn node_kind_label(kind: &NodeKind) -> String {
         NodeKind::SensoryPattern(_) => "sensory".to_string(),
         NodeKind::Action(action) => format!("action:{}", action.label()),
         NodeKind::Outcome(v) => format!("outcome:{v:.4}"),
-        NodeKind::Sound(v) => format!("sound:{v:.4}"),
+        NodeKind::Sound(s) => format!("sound:{:.4}:sig{}", s.intensity, s.signature),
         NodeKind::Concept => "concept".to_string(),
     }
 }

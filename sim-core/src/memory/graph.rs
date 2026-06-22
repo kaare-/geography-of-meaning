@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use super::concepts::{ActiveConcept, ConceptNode};
 use super::edges::{EdgeType, MemoryEdge};
-use super::nodes::{MemoryNode, NodeId, NodeKind};
+use super::nodes::{MemoryNode, NodeId, NodeKind, SoundNode};
 
 const SIMILARITY_THRESHOLD: f32 = 0.85;
 const CONCEPT_CLUSTER_THRESHOLD: f32 = 0.75;
@@ -73,14 +73,54 @@ impl MemoryGraph {
         None
     }
 
-    pub fn record_heard_sound(&mut self, sensory: SensorState, intensity: f32) {
+    pub fn record_heard_sound(&mut self, sensory: SensorState, intensity: f32, signature: u64) {
         if intensity < 0.08 {
             return;
         }
         let sensory_id = self.find_or_create_sensory(sensory);
-        let sound_id = self.create_node(NodeKind::Sound(intensity));
+        let sound_id = self.create_node(NodeKind::Sound(SoundNode {
+            intensity,
+            signature,
+        }));
         self.add_or_strengthen_edge(sound_id, sensory_id, EdgeType::SoundActivates);
         self.add_or_strengthen_edge(sensory_id, sound_id, EdgeType::CoOccurs);
+    }
+
+    /// Signatures with positive mean sound→outcome association above confidence threshold.
+    pub fn trusted_signature_count(&self) -> usize {
+        let mut by_sig: HashMap<u64, (f32, f32)> = HashMap::new();
+        for node in &self.nodes {
+            let NodeKind::Sound(sound) = node.kind else {
+                continue;
+            };
+            let (outcome, weight) = self.sound_node_outcome_stats(node.id);
+            if weight < 1e-6 {
+                continue;
+            }
+            let entry = by_sig.entry(sound.signature).or_insert((0.0, 0.0));
+            entry.0 += outcome * weight;
+            entry.1 += weight;
+        }
+        by_sig
+            .values()
+            .filter(|(total, w)| *w > 0.05 && *total / *w > 0.03)
+            .count()
+    }
+
+    /// Extra follow weight when calls are salient and memory links signature to positive outcomes.
+    pub fn trusted_follow_boost(&self, sound_calls: f32, heard_signature: Option<u64>) -> f32 {
+        let Some(sig) = heard_signature else {
+            return 0.0;
+        };
+        if sound_calls < 0.08 {
+            return 0.0;
+        }
+        let outcome = self.signature_mean_outcome(sig);
+        if outcome > 0.03 {
+            sound_calls * outcome * 2.0
+        } else {
+            0.0
+        }
     }
 
     pub fn node_summary(&self) -> MemoryNodeSummary {
@@ -251,21 +291,101 @@ impl MemoryGraph {
             };
             let predicted_delta = self.predict_outcome_for_action(edge.target_id);
             let weight = edge.strength * edge.confidence * source_weight;
-            match action {
-                Action::Move(_) => predictions.move_delta += predicted_delta * weight,
-                Action::Push(_) => predictions.push_delta += predicted_delta * weight,
-                Action::ConsumeOrganic => predictions.consume_delta += predicted_delta * weight,
-                Action::Rest => predictions.rest_delta += predicted_delta * weight,
-                Action::EmitSound => predictions.emit_sound_delta += predicted_delta * weight,
-                Action::Follow => predictions.follow_delta += predicted_delta * weight,
-                Action::Dig => predictions.dig_delta += predicted_delta * weight,
-                Action::Carry => predictions.carry_delta += predicted_delta * weight,
-                Action::Drop => predictions.drop_delta += predicted_delta * weight,
-                Action::PlaceMaterial => predictions.place_material_delta += predicted_delta * weight,
-                Action::ApplyBinder => predictions.apply_binder_delta += predicted_delta * weight,
+            accumulate_action_prediction(&mut predictions, action, predicted_delta * weight);
+        }
+
+        for edge in &self.edges {
+            if edge.edge_type != EdgeType::SoundActivates {
+                continue;
+            }
+            let sound_node = self.nodes.iter().find(|n| n.id == edge.source_id);
+            let Some(NodeKind::Sound(sound)) = sound_node.map(|n| n.kind) else {
+                continue;
+            };
+            let sig_boost = self.signature_outcome_boost(sound.signature);
+            let sensory_id_activated = edge.target_id;
+            let sensory_weight = if sensory_id == Some(sensory_id_activated) {
+                1.0
+            } else {
+                spread.get(&sensory_id_activated).copied().unwrap_or(0.0)
+            };
+            if sensory_weight < 1e-6 {
+                continue;
+            }
+            let sound_weight = edge.strength * edge.confidence * sig_boost * sensory_weight;
+
+            for pedge in &self.edges {
+                if pedge.edge_type != EdgeType::Precedes || pedge.source_id != sensory_id_activated {
+                    continue;
+                }
+                let action_node = self.nodes.iter().find(|n| n.id == pedge.target_id);
+                let Some(NodeKind::Action(action)) = action_node.map(|n| n.kind) else {
+                    continue;
+                };
+                let predicted_delta = self.predict_outcome_for_action(pedge.target_id);
+                let weight = pedge.strength * pedge.confidence * sound_weight;
+                accumulate_action_prediction(&mut predictions, action, predicted_delta * weight);
             }
         }
+
         predictions
+    }
+
+    fn sound_node_outcome_stats(&self, sound_id: NodeId) -> (f32, f32) {
+        let mut total = 0.0f32;
+        let mut weight_sum = 0.0f32;
+        for edge in &self.edges {
+            if edge.source_id != sound_id || edge.edge_type != EdgeType::SoundActivates {
+                continue;
+            }
+            let sensory_id = edge.target_id;
+            for pedge in &self.edges {
+                if pedge.edge_type != EdgeType::Precedes || pedge.source_id != sensory_id {
+                    continue;
+                }
+                let predicted = self.predict_outcome_for_action(pedge.target_id);
+                let w = edge.confidence * pedge.confidence;
+                total += predicted * w;
+                weight_sum += w;
+            }
+        }
+        if weight_sum > 1e-6 {
+            (total / weight_sum, weight_sum)
+        } else {
+            (0.0, 0.0)
+        }
+    }
+
+    fn signature_mean_outcome(&self, signature: u64) -> f32 {
+        let mut total = 0.0f32;
+        let mut weight_sum = 0.0f32;
+        for node in &self.nodes {
+            let NodeKind::Sound(sound) = node.kind else {
+                continue;
+            };
+            if sound.signature != signature {
+                continue;
+            }
+            let (outcome, w) = self.sound_node_outcome_stats(node.id);
+            total += outcome * w;
+            weight_sum += w;
+        }
+        if weight_sum > 1e-6 {
+            total / weight_sum
+        } else {
+            0.0
+        }
+    }
+
+    fn signature_outcome_boost(&self, signature: u64) -> f32 {
+        let mean = self.signature_mean_outcome(signature);
+        if mean > 0.0 {
+            1.0 + mean.min(0.5)
+        } else if mean < 0.0 {
+            (1.0 + mean.max(-0.3)).max(0.5)
+        } else {
+            1.0
+        }
     }
 
     fn predict_outcome_for_action(&self, action_id: NodeId) -> f32 {
@@ -466,6 +586,22 @@ impl MemoryGraph {
                 delay_variance: 0.5,
             });
         }
+    }
+}
+
+fn accumulate_action_prediction(predictions: &mut ActionPredictions, action: Action, delta: f32) {
+    match action {
+        Action::Move(_) => predictions.move_delta += delta,
+        Action::Push(_) => predictions.push_delta += delta,
+        Action::ConsumeOrganic => predictions.consume_delta += delta,
+        Action::Rest => predictions.rest_delta += delta,
+        Action::EmitSound => predictions.emit_sound_delta += delta,
+        Action::Follow => predictions.follow_delta += delta,
+        Action::Dig => predictions.dig_delta += delta,
+        Action::Carry => predictions.carry_delta += delta,
+        Action::Drop => predictions.drop_delta += delta,
+        Action::PlaceMaterial => predictions.place_material_delta += delta,
+        Action::ApplyBinder => predictions.apply_binder_delta += delta,
     }
 }
 

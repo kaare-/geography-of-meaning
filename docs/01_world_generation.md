@@ -32,7 +32,7 @@ Fractions coexist per voxel: hard mineral, soft mineral, coarse mineral, clay, o
 |------|-------|
 | Surface | `surface_water` |
 | Pore | `water_content` |
-| Groundwater | planned |
+| Groundwater | `flow_groundwater` every 5 ticks on active chunks |
 | Snow / ice | `snow`, `ice` |
 
 Behaviors in `water.rs`: flow downhill, infiltrate, evaporate, freeze/melt stubs.
@@ -55,7 +55,7 @@ Researcher descriptions (channels, trails, caches) refer to emergent patterns â€
 | `chunk.rs` | 16Â³ chunk container |
 | `material.rs` | Terrain generation |
 | `climate.rs` | Global and per-voxel climate |
-| `water.rs` | Rain, flow, infiltration, evaporation |
+| `water.rs` | Rain, flow, infiltration, evaporation, groundwater stub |
 | `mod.rs` | `World` struct, tick loop, spawn scan |
 
 ## Planned

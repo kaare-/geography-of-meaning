@@ -58,7 +58,12 @@ const APPLY_BINDER_ENERGY_COST: f32 = 0.06;
 const APPLY_BINDER_FATIGUE_COST: f32 = 0.12;
 const BINDER_ORGANIC_COST: f32 = 0.04;
 
-pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping: bool) -> Action {
+pub fn choose_action<R: Rng + ?Sized>(
+    creature: &Creature,
+    rng: &mut R,
+    sleeping: bool,
+    heard_signature: Option<u64>,
+) -> Action {
     let push_dir = Vec3i::new(
         rng.gen_range(-1..=1),
         rng.gen_range(-1..=1),
@@ -127,6 +132,9 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
     if creature.sensor.sound_calls > 0.08 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
             weights[i].1 += creature.sensor.sound_calls * 1.5;
+            weights[i].1 += creature
+                .memory_graph
+                .trusted_follow_boost(creature.sensor.sound_calls, heard_signature);
         }
     }
 

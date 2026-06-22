@@ -134,7 +134,7 @@ Something becomes meaningful when it **changes expectations about future states*
 |-----------|----------|
 | `Experience` struct | `sim-core/src/creatures/creature.rs` |
 | `MemoryGraph`, `record_experience`, `find_similar_sensory` | `sim-core/src/memory/graph.rs` |
-| `record_heard_sound`, `node_summary`, concept clustering in `consolidate_sleep` | `sim-core/src/memory/graph.rs` |
+| `record_heard_sound` (with `signature`), `trusted_signature_count`, sound prediction paths | `sim-core/src/memory/graph.rs` |
 | `NodeKind`, `MemoryNode` | `sim-core/src/memory/nodes.rs` |
 | `EdgeType`, `MemoryEdge` | `sim-core/src/memory/edges.rs` |
 | `ConceptNode`, `ActiveConcept`, `activate_concepts` | `sim-core/src/memory/concepts.rs` |

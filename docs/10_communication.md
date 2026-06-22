@@ -111,14 +111,17 @@ A sound becomes meaningful when it **changes expectations about future regulator
 | `SoundEvent`, `World::active_sounds` | `world/sound.rs`, `world/mod.rs` | Implemented |
 | `Action::EmitSound` | `creatures/actions.rs` | Uses `genome.vocal_profile`; energy cost; biased when energy high |
 | `Action::Follow` | `creatures/actions.rs`, `spatial.rs` | Biased by `chemical_creature` / `sound_calls`; engine resolves direction toward strongest neighbor gradient |
-| `NodeKind::Sound`, `record_heard_sound` | `memory/graph.rs` | Sound nodes on hear |
+| `NodeKind::Sound` (`intensity`, `signature`), `record_heard_sound` | `memory/graph.rs` | Sound nodes with emitter signature on hear |
+| `predict_action_outcomes` sound paths | `memory/graph.rs` | `SoundActivates` chains weighted by edge confidence and per-signature outcome boost |
+| `trusted_follow_boost`, `trusted_signature_count` | `memory/graph.rs`, `export/snapshots.rs` | Follow bias when calls salient + positive sound→outcome for signature |
+| `dominant_heard_signature` | `creatures/sensors.rs` | Resolves strongest non-self emitter per tick |
 | `EdgeType::SoundActivates` | `memory/edges.rs` | Used on heard experiences |
 | `signature` | `creatures/creature.rs` | Assigned at spawn |
 | `genome.vocal_profile` | `creatures/genome.rs` | Pitch, duration, amplitude, rhythm; mutated on reproduction |
 | `SoundEvent::signal_family_id` | `world/sound.rs` | Hash of vocal profile for family tracking |
 | Tick log sound export | `export/logs.rs` | `sound_event_count` + optional slice with `signal_family_id` |
-| Listener signature match | — | Planned |
-| Trust as confidence | — | Planned (implicit in edge weights) |
+| Listener signature match | `sensors.rs` `dominant_heard_signature` | Implemented |
+| Trust as confidence | `memory/graph.rs` | Per-signature outcome boost in prediction; `trusted_signature_count` in snapshot |
 
 ## Planned
 

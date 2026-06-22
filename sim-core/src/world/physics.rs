@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use rayon::prelude::*;
+
 use super::chunk::{Chunk, ChunkCoord};
 use super::voxel::{idx, CHUNK_SIZE};
 
@@ -29,12 +31,11 @@ pub fn tick_load_physics(
     chunks: &mut HashMap<ChunkCoord, Chunk>,
     active_chunks: &HashSet<ChunkCoord>,
 ) {
-    let coords: Vec<_> = active_chunks.iter().copied().collect();
-    for coord in coords {
-        if let Some(chunk) = chunks.get_mut(&coord) {
-            propagate_load_in_chunk(chunk);
-        }
-    }
+    let active = active_chunks.clone();
+    chunks
+        .par_iter_mut()
+        .filter(|(coord, _)| active.contains(coord))
+        .for_each(|(_, chunk)| propagate_load_in_chunk(chunk));
 }
 
 fn propagate_load_in_chunk(chunk: &mut Chunk) {

@@ -194,6 +194,18 @@ pub fn read_sensors_with_noise<R: Rng + ?Sized>(
     state
 }
 
+/// Strongest non-self sound at the listener position, if above noise floor.
+pub fn dominant_heard_signature(creature: &Creature, world: &World) -> Option<u64> {
+    world
+        .active_sounds
+        .iter()
+        .filter(|s| s.emitter_id != creature.id)
+        .map(|s| (s.attenuated_at(creature.position), s.signature))
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+        .filter(|(att, _)| *att > 0.05)
+        .map(|(_, sig)| sig)
+}
+
 fn gaussian_noise<R: Rng + ?Sized>(rng: &mut R) -> f32 {
     let u1: f32 = rng.gen_range(0.0001..1.0);
     let u2: f32 = rng.gen_range(0.0..1.0);

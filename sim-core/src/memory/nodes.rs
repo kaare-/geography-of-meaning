@@ -6,11 +6,17 @@ use crate::creatures::sensors::SensorState;
 pub type NodeId = u64;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct SoundNode {
+    pub intensity: f32,
+    pub signature: u64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum NodeKind {
     SensoryPattern(SensorState),
     Action(Action),
     Outcome(f32),
-    Sound(f32),
+    Sound(SoundNode),
     Concept,
 }
 

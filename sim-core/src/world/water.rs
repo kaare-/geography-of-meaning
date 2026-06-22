@@ -8,6 +8,10 @@ pub fn surface_water_total(chunk: &Chunk) -> f32 {
 const MAX_FLOW: f32 = 0.15;
 const INFILTRATION_RATE: f32 = 0.05;
 const EVAPORATION_RATE: f32 = 0.02;
+const GROUNDWATER_MIN_CONTENT: f32 = 0.15;
+const GROUNDWATER_FLOW_RATE: f32 = 0.02;
+const GROUNDWATER_MAX_TRANSFER: f32 = 0.02;
+const GROUNDWATER_MAX_VOID: f32 = 0.45;
 
 pub fn apply_rain(chunk: &mut Chunk, amount: f32) {
     for z in (0..CHUNK_SIZE).rev() {
@@ -115,6 +119,62 @@ pub fn tick_water(chunk: &mut Chunk, global_humidity: f32) {
     infiltrate(chunk);
     evaporate(chunk, global_humidity);
     freeze_melt(chunk);
+}
+
+/// Slow horizontal redistribution of deep `water_content` toward lower neighbors.
+pub fn flow_groundwater(chunk: &mut Chunk) {
+    let mut transfers: Vec<(usize, usize, f32)> = Vec::new();
+
+    for z in 0..CHUNK_SIZE {
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                let i = idx(x, y, z);
+                let wc = chunk.fields.water_content[i];
+                if wc < GROUNDWATER_MIN_CONTENT {
+                    continue;
+                }
+                if chunk.fields.void_fraction[i] > GROUNDWATER_MAX_VOID {
+                    continue;
+                }
+
+                let mut lowest = wc;
+                let mut target = None;
+                for (dx, dy) in [(1i32, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+                    if nx < 0
+                        || ny < 0
+                        || (nx as usize) >= CHUNK_SIZE
+                        || (ny as usize) >= CHUNK_SIZE
+                    {
+                        continue;
+                    }
+                    let ni = idx(nx as usize, ny as usize, z);
+                    if chunk.fields.void_fraction[ni] > GROUNDWATER_MAX_VOID {
+                        continue;
+                    }
+                    let neighbor_wc = chunk.fields.water_content[ni];
+                    if neighbor_wc < lowest {
+                        lowest = neighbor_wc;
+                        target = Some(ni);
+                    }
+                }
+
+                if let Some(to) = target {
+                    let flow = ((wc - lowest) * GROUNDWATER_FLOW_RATE).min(GROUNDWATER_MAX_TRANSFER);
+                    if flow > 0.0 {
+                        transfers.push((i, to, flow));
+                    }
+                }
+            }
+        }
+    }
+
+    for (from, to, amount) in transfers {
+        chunk.fields.water_content[from] =
+            (chunk.fields.water_content[from] - amount).max(0.0);
+        chunk.fields.water_content[to] += amount;
+    }
 }
 
 fn neighbors_6(x: usize, y: usize, z: usize) -> Vec<(usize, usize, usize)> {
