@@ -10,6 +10,7 @@ pub struct RegulatoryState {
     pub integrity: f32,
     pub fatigue: f32,
     pub carried_mass: f32,
+    pub energy_depleted_ticks: u8,
 }
 
 impl Default for RegulatoryState {
@@ -21,6 +22,7 @@ impl Default for RegulatoryState {
             integrity: 1.0,
             fatigue: 0.0,
             carried_mass: 0.0,
+            energy_depleted_ticks: 0,
         }
     }
 }
@@ -36,10 +38,10 @@ impl RegulatoryState {
         self.temperature_stress = sensor.internal_temperature_stress;
         if self.temperature_stress > 0.85 {
             self.integrity =
-                (self.integrity - (self.temperature_stress - 0.85) * 0.01).max(0.0);
+                (self.integrity - (self.temperature_stress - 0.85) * 0.007).max(0.0);
         }
         if self.fatigue > 0.9 {
-            self.integrity = (self.integrity - 0.002).max(0.0);
+            self.integrity = (self.integrity - 0.001).max(0.0);
         }
     }
 

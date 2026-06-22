@@ -97,7 +97,7 @@ temperature > 18.0
 water_content + surface_water > 0.1
 ```
 
-Score: `organic × water × (temperature / 25.0)`. Top-scoring positions are returned. This is procedural habitat selection — not a named Eden region in code.
+Score: `organic × water × (temperature / 25.0)`. Top-scoring positions are returned. After selection, `World::enrich_spawn_site` boosts organic (+0.12) and water_content (+0.05) in a 3×3×3 neighborhood so the starting cradle has reliable food. Shallow soil organic in `fill_terrain` is slightly richer near the surface. This is procedural habitat selection — not a named Eden region in code.
 
 ## Why Eden Exists
 
@@ -255,11 +255,12 @@ See [14_time_and_scales.md](14_time_and_scales.md), [24_world_history_and_archae
 | `World::generate_terrain` | `world/mod.rs` | Implemented |
 | `World::find_spawn_positions` | `world/mod.rs` | Implemented |
 | Warm/wet/organic spawn scan | `world/mod.rs` | Implemented |
+| `World::enrich_spawn_site` (Eden organic boost) | `world/mod.rs` | Implemented |
 | `Creature::new` + initial `read_sensors` | `creatures/creature.rs`, `engine.rs` | Implemented |
 | CLI `--creatures`, `--world-size`, `--seed` | `main.rs` | Implemented |
 | Morphology variation at spawn | — | Planned |
 | Multiple Edens | — | Planned |
-| Reproduction / population growth | — | Planned |
+| Reproduction / population growth | `lifecycle.rs`, `engine.rs` | Implemented |
 
 ## Initialization flow
 
@@ -267,6 +268,7 @@ See [14_time_and_scales.md](14_time_and_scales.md), [24_world_history_and_archae
 CLI args → SimulationConfig
   → World::generate_terrain(world_chunks, seed)
   → World::find_spawn_positions(creature_count)
+  → for each spawn: World::enrich_spawn_site(pos)
   → for each position: Creature::new(id, pos, signature)
   → read_sensors(creature, world, rng)
   → Simulation { world, creatures, ... }

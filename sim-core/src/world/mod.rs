@@ -221,4 +221,20 @@ impl World {
             .map(|(_, pos)| pos)
             .collect()
     }
+
+    /// Boost organic and moisture around Eden spawn sites so early populations can feed.
+    pub fn enrich_spawn_site(&mut self, pos: Vec3f) {
+        let base = pos.floor_i();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    let check = Vec3i::new(base.x + dx, base.y + dy, base.z + dz);
+                    if let Some(voxel) = self.sample_voxel_mut(check) {
+                        *voxel.organic = (*voxel.organic + 0.12).min(0.5);
+                        *voxel.water_content = (*voxel.water_content + 0.05).min(0.4);
+                    }
+                }
+            }
+        }
+    }
 }

@@ -34,7 +34,7 @@ pub fn fill_terrain(chunk: &mut Chunk, world_x: i32, world_y: i32, height_map: &
                     chunk.fields.structural_strength[i] = 0.9;
                 } else if (z as f32) < height {
                     let depth = height - z as f32;
-                    let organic = (0.15 / depth.max(0.5)).min(0.4);
+                    let organic = (0.18 / depth.max(0.5)).min(0.45);
                     let clay = if height < 6.0 { 0.25 } else { 0.1 };
                     let coarse = 0.2;
                     chunk.fields.hard_mineral[i] = 0.1;

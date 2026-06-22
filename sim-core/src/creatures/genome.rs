@@ -11,7 +11,7 @@ pub struct Genome {
 impl Default for Genome {
     fn default() -> Self {
         Self {
-            metabolism_rate: 0.01,
+            metabolism_rate: 0.007,
             sensor_noise_scale: 0.05,
             move_speed: 1.0,
         }
@@ -21,7 +21,7 @@ impl Default for Genome {
 impl Genome {
     pub fn mutate_from<R: Rng + ?Sized>(parent: &Genome, rng: &mut R) -> Self {
         Self {
-            metabolism_rate: (parent.metabolism_rate + rng.gen_range(-0.002..0.002)).clamp(0.005, 0.03),
+            metabolism_rate: (parent.metabolism_rate + rng.gen_range(-0.002..0.002)).clamp(0.004, 0.025),
             sensor_noise_scale: (parent.sensor_noise_scale + rng.gen_range(-0.01..0.01)).clamp(0.01, 0.15),
             move_speed: (parent.move_speed + rng.gen_range(-0.1..0.1)).clamp(0.5, 2.0),
         }

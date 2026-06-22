@@ -23,8 +23,11 @@ pub struct Simulation {
 impl Simulation {
     pub fn new(config: SimulationConfig) -> Self {
         let mut rng = StdRng::seed_from_u64(config.seed);
-        let world = World::generate_terrain(config.world_chunks, config.seed);
+        let mut world = World::generate_terrain(config.world_chunks, config.seed);
         let spawn_positions = world.find_spawn_positions(config.creature_count);
+        for pos in &spawn_positions {
+            world.enrich_spawn_site(*pos);
+        }
 
         let mut creatures = Vec::new();
         for (i, pos) in spawn_positions.iter().enumerate() {
@@ -110,7 +113,7 @@ impl Simulation {
                 if let Some(voxel) = self.world.sample_voxel(pos) {
                     if voxel.erosion_damage > 0.5 {
                         creature.regulatory.integrity -=
-                            (voxel.erosion_damage - 0.5) * 0.03;
+                            (voxel.erosion_damage - 0.5) * 0.02;
                     }
                 }
             }
@@ -139,6 +142,12 @@ impl Simulation {
             }
             creature.refresh_active_concepts();
             creature.regulatory.clamp();
+            if creature.regulatory.energy <= 0.0 {
+                creature.regulatory.energy_depleted_ticks =
+                    creature.regulatory.energy_depleted_ticks.saturating_add(1);
+            } else {
+                creature.regulatory.energy_depleted_ticks = 0;
+            }
             creature.age += 1;
 
             if let Some(cause) = creature.death_cause() {

@@ -10,8 +10,11 @@ use super::genome::Genome;
 /// Organic matter returned to the voxel field when a creature dies.
 pub const DEATH_ORGANIC_DEPOSIT: f32 = 0.08;
 
-pub const REPRODUCTION_ENERGY_THRESHOLD: f32 = 0.7;
+pub const REPRODUCTION_ENERGY_THRESHOLD: f32 = 0.6;
 pub const REPRODUCTION_CHANCE_PER_TICK: f32 = 0.02;
+pub const REPRODUCTION_CHANCE_HIGH_ENERGY: f32 = 0.04;
+pub const REPRODUCTION_HIGH_ENERGY_THRESHOLD: f32 = 0.6;
+pub const ENERGY_DEPLETION_GRACE_TICKS: u8 = 3;
 pub const REPRODUCTION_ENERGY_COST: f32 = 0.25;
 pub const DEFAULT_MAX_POPULATION: usize = 50;
 
@@ -40,13 +43,17 @@ pub struct BirthEvent {
 
 impl Creature {
     pub fn is_alive(&self) -> bool {
-        self.regulatory.energy > 0.0 && self.regulatory.integrity > 0.0
+        self.regulatory.integrity > 0.0
+            && (self.regulatory.energy > 0.0
+                || self.regulatory.energy_depleted_ticks < ENERGY_DEPLETION_GRACE_TICKS)
     }
 
     pub fn death_cause(&self) -> Option<DeathCause> {
         if self.regulatory.integrity <= 0.0 {
             Some(DeathCause::IntegrityFailure)
-        } else if self.regulatory.energy <= 0.0 {
+        } else if self.regulatory.energy <= 0.0
+            && self.regulatory.energy_depleted_ticks >= ENERGY_DEPLETION_GRACE_TICKS
+        {
             Some(DeathCause::EnergyDepletion)
         } else {
             None
@@ -113,7 +120,12 @@ pub fn try_reproduce<R: Rng + ?Sized>(
     {
         return None;
     }
-    if rng.gen::<f32>() >= REPRODUCTION_CHANCE_PER_TICK {
+    let reproduction_chance = if parent.regulatory.energy > REPRODUCTION_HIGH_ENERGY_THRESHOLD {
+        REPRODUCTION_CHANCE_HIGH_ENERGY
+    } else {
+        REPRODUCTION_CHANCE_PER_TICK
+    };
+    if rng.gen::<f32>() >= reproduction_chance {
         return None;
     }
     let position = find_offspring_position(parent, world, rng)?;

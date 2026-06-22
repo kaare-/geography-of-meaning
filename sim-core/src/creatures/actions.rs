@@ -38,7 +38,7 @@ const EMIT_SOUND_BASE_WEIGHT: f32 = 0.15;
 const EMIT_SOUND_ENERGY_BOOST: f32 = 2.5;
 const EMIT_SOUND_ENERGY_COST: f32 = 0.08;
 const CARRIED_MASS_CAP: f32 = 0.5;
-const DIG_ENERGY_COST: f32 = 0.12;
+const DIG_ENERGY_COST: f32 = 0.09;
 const DIG_FATIGUE_COST: f32 = 0.15;
 const CARRY_ENERGY_COST: f32 = 0.04;
 const CARRY_FATIGUE_COST: f32 = 0.08;
@@ -160,7 +160,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
             if let Some(voxel) = world.sample_voxel(new_pos) {
                 if voxel.void_fraction > 0.4 {
                     creature.position = Vec3f::from_vec3i(new_pos);
-                    creature.regulatory.apply_action_cost(0.05 * speed, 0.1);
+                    creature.regulatory.apply_action_cost(0.035 * speed, 0.08);
                     if let Some(mut surface) = world.sample_voxel_mut(new_pos) {
                         apply_trail_wear(&mut surface);
                     }
@@ -179,10 +179,10 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                         let check = Vec3i::new(pos.x + dx, pos.y + dy, pos.z + dz);
                         if let Some(voxel) = world.sample_voxel_mut(check) {
                             if *voxel.organic > 0.05 {
-                                let transfer = (*voxel.organic * 0.2).min(0.1);
+                                let transfer = (*voxel.organic * 0.25).min(0.12);
                                 *voxel.organic -= transfer;
                                 creature.regulatory.energy =
-                                    (creature.regulatory.energy + transfer * 2.0).min(1.0);
+                                    (creature.regulatory.energy + transfer * 2.5).min(1.0);
                                 creature.regulatory.apply_action_cost(0.02, 0.05);
                                 consumed = true;
                             }
@@ -198,7 +198,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
         }
         Action::Rest => {
             creature.regulatory.fatigue = (creature.regulatory.fatigue - 0.15).max(0.0);
-            creature.regulatory.energy = (creature.regulatory.energy + 0.05).min(1.0);
+            creature.regulatory.energy = (creature.regulatory.energy + 0.07).min(1.0);
             if creature.sensor.chemical_wet_mineral > 0.15 {
                 creature.regulatory.hydration = (creature.regulatory.hydration
                     + creature.sensor.chemical_wet_mineral * 0.03)
