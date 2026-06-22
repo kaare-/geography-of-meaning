@@ -22,6 +22,8 @@ pub struct SimulationConfig {
     pub climate_water_every_tick: bool,
     /// Interval for erosion_damage placeholder updates (see `World::tick_erosion`).
     pub erosion_tick_interval: u64,
+    /// Write `world_tick_{t}.json` every N ticks; 0 = final snapshot only.
+    pub snapshot_interval: u64,
     /// Ticks per simulated day (diurnal phase); mirrored from `world::TICKS_PER_DAY`.
     pub ticks_per_day: u64,
 }
@@ -37,6 +39,7 @@ impl Default for SimulationConfig {
             max_population: DEFAULT_MAX_POPULATION,
             climate_water_every_tick: true,
             erosion_tick_interval: DEFAULT_EROSION_TICK_INTERVAL,
+            snapshot_interval: 0,
             ticks_per_day: TICKS_PER_DAY,
         }
     }

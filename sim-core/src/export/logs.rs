@@ -12,6 +12,8 @@ pub struct SoundEventSnapshot {
     pub signature: u64,
     pub amplitude: f32,
     pub frequency_profile: f32,
+    pub rhythm: f32,
+    pub signal_family_id: u64,
     pub age: u32,
     pub duration: u32,
 }
@@ -23,6 +25,8 @@ impl SoundEventSnapshot {
             signature: event.signature,
             amplitude: event.amplitude,
             frequency_profile: event.frequency_profile,
+            rhythm: event.rhythm,
+            signal_family_id: event.signal_family_id,
             age: event.age,
             duration: event.duration,
         }
@@ -33,6 +37,7 @@ impl SoundEventSnapshot {
 pub struct ActionCounts {
     pub move_count: u32,
     pub push_count: u32,
+    pub follow_count: u32,
     pub dig_count: u32,
     pub carry_count: u32,
     pub drop_count: u32,

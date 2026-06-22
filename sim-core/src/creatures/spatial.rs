@@ -60,6 +60,39 @@ fn find_displacement_slot(
     None
 }
 
+pub const FOLLOW_ENERGY_COST: f32 = 0.04;
+pub const FOLLOW_FATIGUE_COST: f32 = 0.09;
+
+/// Step direction toward the adjacent neighbor with strongest creature-trace gradient.
+pub fn compute_follow_direction(creature: &Creature, others: &[Creature]) -> Option<Vec3i> {
+    let center = creature.position.floor_i();
+    let mut best_strength = 0.0f32;
+    let mut best_dir = None;
+
+    for other in others {
+        if other.id == creature.id {
+            continue;
+        }
+        let other_pos = other.position.floor_i();
+        let dx = other_pos.x - center.x;
+        let dy = other_pos.y - center.y;
+        let dz = other_pos.z - center.z;
+        if dx.abs() > 1 || dy.abs() > 1 || dz.abs() > 1 {
+            continue;
+        }
+        if dx == 0 && dy == 0 && dz == 0 {
+            continue;
+        }
+        let dist_sq = (dx * dx + dy * dy + dz * dz) as f32;
+        let strength = 0.15 / dist_sq.max(1.0);
+        if strength > best_strength {
+            best_strength = strength;
+            best_dir = Some(Vec3i::new(dx.signum(), dy.signum(), dz.signum()));
+        }
+    }
+    best_dir
+}
+
 pub fn try_creature_move_at(
     creatures: &mut [Creature],
     idx: usize,

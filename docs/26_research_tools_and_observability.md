@@ -251,7 +251,7 @@ Export formats:
 | JSON (world snapshot) | Implemented — `exports/snapshots/world_final.json` |
 | JSONL (tick log) | Implemented — `exports/logs/tick_log.jsonl` |
 | CSV | Planned |
-| GraphML | Planned |
+| GraphML | Implemented — `snapshots/memory_creature_{id}.graphml` |
 | Images | Partial — `load_snapshot.py --plot` |
 | Video | Planned |
 | Timelines | Planned |
@@ -265,7 +265,8 @@ Simulation::run()
   → export_all(sim, output_dir)
     → write_snapshot → WorldSnapshot::from_simulation
     → write_tick_log → TickLogEntry per tick
-    → export_memory_for_sim → snapshots/memory_creature_{id}.json
+    → export_memory_for_sim → snapshots/memory_creature_{id}.json + .graphml
+    → optional interval snapshots via `--snapshot-interval N` → world_tick_{t}.json
 ```
 
 Implemented in `sim-core/src/export/mod.rs`, `snapshots.rs`, `logs.rs`, `memory_dump.rs`.
@@ -277,27 +278,27 @@ python analysis/scripts/load_snapshot.py exports/snapshots/world_final.json
 python analysis/scripts/load_snapshot.py --plot organic
 ```
 
-`load_snapshot.py` summarizes time, season, chunk count, creature count, memory graph export path (`snapshots/memory_creature_*.json`), and optionally plots a 2D field slice.
+`load_snapshot.py` summarizes time, season, chunk count, creature count, memory graph export paths (`snapshots/memory_creature_*.json` and `.graphml`), and optionally plots a 2D field slice.
 
 ## Current implementation
 
 | Tool | Location | Status |
 |------|----------|--------|
 | `WorldSnapshot` / `CreatureSnapshot` | `export/snapshots.rs` | Memory node counts by type, concept count, active concepts |
-| `MemoryGraphExport` | `export/memory_dump.rs` | Full nodes/edges for sample creature |
+| `MemoryGraphExport` / GraphML | `export/memory_dump.rs` | JSON + GraphML nodes/edges with strength, type |
+| `--snapshot-interval` CLI | `main.rs`, `scheduler.rs` | Periodic `world_tick_{t}.json` checkpoints |
 | `TickLogEntry` | `export/logs.rs` | Births, deaths, `push_events`, action counts, sound slice |
 | `export_all()` | `export/mod.rs` | Implemented |
-| `load_snapshot.py` | `analysis/scripts/` | Snapshot + tick-log summary; memory export path |
+| `load_snapshot.py` | `analysis/scripts/` | Snapshot + tick-log summary; JSON + GraphML memory paths |
 | Creature inspector UI | — | Planned |
 | Memory graph viewer | — | Planned |
 | All specialized viewers | — | Planned |
-| GraphML / CSV / timeline exports | — | Planned |
+| CSV / timeline exports | — | Planned |
 | Real-time inspection | — | Planned |
 | Narrative extraction | — | Planned |
 
 ## Planned
 
-- Per-creature memory graph GraphML export
 - Concept and prediction inspection endpoints
 - Communication and sound event logging
 - Settlement and infrastructure overlays on world slices

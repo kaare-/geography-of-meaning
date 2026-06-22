@@ -70,8 +70,14 @@ def summarize(data: dict, snapshot_path: Optional[Path] = None) -> None:
             snapshot_path.parent.glob("memory_creature_*.json"),
             key=lambda p: p.name,
         )
+        graphml_files = sorted(
+            snapshot_path.parent.glob("memory_creature_*.graphml"),
+            key=lambda p: p.name,
+        )
         if memory_files:
             print(f"Memory graph export: {memory_files[0]}")
+        if graphml_files:
+            print(f"GraphML export:      {graphml_files[0]}")
 
 
 def plot_slice(data: dict, field: str = "organic") -> None:

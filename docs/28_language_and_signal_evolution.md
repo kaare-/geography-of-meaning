@@ -310,24 +310,24 @@ Language is **never** hardcoded in creature code. No word list, no grammar modul
 |-----------|----------|--------|
 | `sound_ambient`, `sound_calls` sensors | `creatures/sensors.rs` | Read from propagated `SoundEvent`s |
 | `SoundEvent`, world sound queue | `world/sound.rs` | Implemented |
-| `Action::EmitSound` | `creatures/actions.rs` | Implemented |
+| `Action::EmitSound` | `creatures/actions.rs` | Uses `genome.vocal_profile` (pitch, duration, amplitude, rhythm) |
+| `SoundEvent::signal_family_id` | `world/sound.rs` | Hash of vocal profile for family clustering |
+| `genome.vocal_profile` mutation | `creatures/genome.rs` | Offspring inherit slightly mutated profile |
+| `CreatureSnapshot.vocal_profile` | `export/snapshots.rs` | Exported in world snapshots |
 | `NodeKind::Sound`, `record_heard_sound` | `memory/graph.rs` | Implemented |
 | `EdgeType::SoundActivates` | `memory/edges.rs` | Used |
 | `Creature::signature` | `creatures/creature.rs` | Assigned at spawn |
 | Tick log sound export | `export/logs.rs` | Count + optional slice |
 | Listener signature resolution | — | Planned |
 | `sound_activates` edge creation on hear | `memory/graph.rs` | Implemented |
-| Signal family / drift tracking | — | Planned |
+| Signal family / drift tracking | `world/sound.rs` | `signal_family_id` from profile hash |
 | Concept compression from sound | — | Planned |
 | Transcripts / sonification export | — | Planned |
 
 ## Planned
 
-- `EmitSound` action with full signal-space parameters
 - Propagation, attenuation, and occlusion in world
 - Per-`signature` listener subgraphs and trust via edge confidence
-- `sound_activates` edge creation on heard experiences
-- Production mutation and lineage-biased inheritance
 - Settlement-scale dialect metrics
 - Communication transcript export
 - Sonification tooling in `analysis/`

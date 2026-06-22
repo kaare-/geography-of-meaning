@@ -13,6 +13,7 @@ pub enum Action {
     ConsumeOrganic,
     Rest,
     EmitSound,
+    Follow,
     Dig,
     Carry,
     Drop,
@@ -28,6 +29,7 @@ impl Action {
             Action::ConsumeOrganic => "consume_organic",
             Action::Rest => "rest",
             Action::EmitSound => "emit_sound",
+            Action::Follow => "follow",
             Action::Dig => "dig",
             Action::Carry => "carry",
             Action::Drop => "drop",
@@ -37,6 +39,7 @@ impl Action {
     }
 }
 
+const FOLLOW_BASE_WEIGHT: f32 = 0.3;
 const EXPLORATION_RATE: f32 = 0.15;
 const PREDICTION_WEIGHT: f32 = 1.5;
 const EMIT_SOUND_BASE_WEIGHT: f32 = 0.15;
@@ -85,6 +88,7 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
             (Action::ConsumeOrganic, 1.0),
             (Action::Rest, 1.0),
             (Action::EmitSound, EMIT_SOUND_BASE_WEIGHT),
+            (Action::Follow, FOLLOW_BASE_WEIGHT),
             (Action::Dig, 0.5),
             (Action::Carry, 0.6),
             (Action::Drop, 0.4),
@@ -112,6 +116,17 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
     if creature.regulatory.fatigue > 0.6 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Rest)) {
             weights[i].1 += 2.0;
+        }
+    }
+
+    if creature.sensor.chemical_creature > 0.05 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
+            weights[i].1 += creature.sensor.chemical_creature * 2.0;
+        }
+    }
+    if creature.sensor.sound_calls > 0.08 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
+            weights[i].1 += creature.sensor.sound_calls * 1.5;
         }
     }
 
@@ -157,6 +172,7 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
                 Action::ConsumeOrganic => predictions.consume_delta,
                 Action::Rest => predictions.rest_delta,
                 Action::EmitSound => predictions.emit_sound_delta,
+                Action::Follow => predictions.follow_delta,
                 Action::Dig => predictions.dig_delta,
                 Action::Carry => predictions.carry_delta,
                 Action::Drop => predictions.drop_delta,
@@ -184,7 +200,7 @@ pub fn choose_action<R: Rng + ?Sized>(creature: &Creature, rng: &mut R, sleeping
 
 pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) -> bool {
     match action {
-        Action::Move(_) | Action::Push(_) => false,
+        Action::Move(_) | Action::Push(_) | Action::Follow => false,
         Action::ConsumeOrganic => {
             let pos = creature.position.floor_i();
             let wet_trace = creature.sensor.chemical_wet_mineral;
@@ -224,15 +240,13 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
             true
         }
         Action::EmitSound => {
-            let amplitude = (creature.regulatory.energy * 0.6 + 0.2).min(1.0);
-            let frequency_profile = (creature.signature as f32 / u64::MAX as f32).fract();
-            world.emit_sound(SoundEvent::new(
+            let energy_scale = (creature.regulatory.energy * 0.6 + 0.2).min(1.0);
+            world.emit_sound(SoundEvent::from_vocal_profile(
                 creature.position,
                 creature.id,
                 creature.signature,
-                amplitude,
-                frequency_profile,
-                8,
+                &creature.genome.vocal_profile,
+                energy_scale,
             ));
             creature.regulatory.apply_action_cost(EMIT_SOUND_ENERGY_COST, 0.05);
             true

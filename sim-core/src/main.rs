@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use sim_core::export::export_all;
+use sim_core::export::{export_all, write_snapshot};
 use sim_core::simulation::{Simulation, SimulationConfig};
 
 #[derive(Parser, Debug)]
@@ -22,6 +22,10 @@ struct Args {
 
     #[arg(long, default_value = "exports")]
     output: String,
+
+    /// Write world_tick_{t}.json every N ticks (0 = final snapshot only).
+    #[arg(long, default_value_t = 0)]
+    snapshot_interval: u64,
 }
 
 fn main() {
@@ -33,14 +37,26 @@ fn main() {
         world_chunks: args.world_size,
         creature_count: args.creatures,
         output_dir: PathBuf::from(&args.output),
+        snapshot_interval: args.snapshot_interval,
         ..SimulationConfig::default()
     };
 
     let mut sim = Simulation::new(config.clone());
-    sim.run();
+    let output_dir = config.output_dir.clone();
+    let snapshot_interval = config.snapshot_interval;
 
-    let output_dir = &config.output_dir;
-    if let Err(e) = export_all(&sim, output_dir) {
+    for _ in 0..config.ticks {
+        sim.tick();
+        if snapshot_interval > 0 && sim.world.time % snapshot_interval == 0 {
+            let path = output_dir.join(format!("snapshots/world_tick_{}.json", sim.world.time));
+            if let Err(e) = write_snapshot(&sim, &path) {
+                eprintln!("Interval snapshot failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Err(e) = export_all(&sim, &output_dir) {
         eprintln!("Export failed: {e}");
         std::process::exit(1);
     }
@@ -65,6 +81,12 @@ fn main() {
             .display()
             .to_string()
     });
+    let graphml_path = sample_creature.map(|c| {
+        output_dir
+            .join(format!("snapshots/memory_creature_{}.graphml", c.id))
+            .display()
+            .to_string()
+    });
 
     println!("Simulation complete.");
     println!("  Ticks:         {}", config.ticks);
@@ -76,8 +98,15 @@ fn main() {
     println!("  Concepts:      {concept_total} total across population");
     println!("  Chunks:        {}", sim.world.chunks.len());
     println!("  Snapshot:      {}", snapshot_path.display());
+    if snapshot_interval > 0 {
+        let interval_count = sim.world.time / snapshot_interval;
+        println!("  Interval snaps:{interval_count} (every {snapshot_interval} ticks)");
+    }
     println!("  Log:           {}", log_path.display());
     if let Some(mem) = memory_path {
         println!("  Memory export: {mem}");
+    }
+    if let Some(gml) = graphml_path {
+        println!("  GraphML export:{gml}");
     }
 }

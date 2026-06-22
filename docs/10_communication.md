@@ -109,20 +109,21 @@ A sound becomes meaningful when it **changes expectations about future regulator
 |-----------|----------|--------|
 | `sound_ambient`, `sound_calls` | `creatures/sensors.rs` | Read from world `active_sounds` |
 | `SoundEvent`, `World::active_sounds` | `world/sound.rs`, `world/mod.rs` | Implemented |
-| `Action::EmitSound` | `creatures/actions.rs` | Energy cost; biased when energy high |
+| `Action::EmitSound` | `creatures/actions.rs` | Uses `genome.vocal_profile`; energy cost; biased when energy high |
+| `Action::Follow` | `creatures/actions.rs`, `spatial.rs` | Biased by `chemical_creature` / `sound_calls`; engine resolves direction toward strongest neighbor gradient |
 | `NodeKind::Sound`, `record_heard_sound` | `memory/graph.rs` | Sound nodes on hear |
 | `EdgeType::SoundActivates` | `memory/edges.rs` | Used on heard experiences |
 | `signature` | `creatures/creature.rs` | Assigned at spawn |
-| Tick log sound export | `export/logs.rs` | `sound_event_count` + optional slice |
+| `genome.vocal_profile` | `creatures/genome.rs` | Pitch, duration, amplitude, rhythm; mutated on reproduction |
+| `SoundEvent::signal_family_id` | `world/sound.rs` | Hash of vocal profile for family tracking |
+| Tick log sound export | `export/logs.rs` | `sound_event_count` + optional slice with `signal_family_id` |
 | Listener signature match | — | Planned |
 | Trust as confidence | — | Planned (implicit in edge weights) |
 
 ## Planned
 
-- `EmitSound` action with frequency/duration/rhythm/intensity
 - Propagation through world (attenuation, occlusion)
 - Per-signature memory subgraphs
-- `sound_activates` edge creation on heard experiences
 - Integration with prediction engine ([08_prediction.md](08_prediction.md))
 
 ## Cross-references

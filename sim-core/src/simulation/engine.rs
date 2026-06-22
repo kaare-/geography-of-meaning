@@ -2,9 +2,10 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use crate::creatures::{
-    apply_action, choose_action, deposit_creature_organic, read_sensors_with_noise,
-    resolve_position_overlaps, try_creature_move_at, try_creature_push_at, try_reproduce,
-    Action, Creature, DeathEvent, Experience, REPRODUCTION_ENERGY_COST,
+    apply_action, choose_action, compute_follow_direction, deposit_creature_organic,
+    read_sensors_with_noise, resolve_position_overlaps, try_creature_move_at,
+    try_creature_push_at, try_reproduce, Action, Creature, DeathEvent, Experience,
+    FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, REPRODUCTION_ENERGY_COST,
 };
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
@@ -147,6 +148,22 @@ impl Simulation {
                         creature.regulatory = self.creatures[idx].regulatory;
                         push_events.push(event);
                         action_counts.push_count += 1;
+                    }
+                }
+                Action::Follow => {
+                    if let Some(delta) =
+                        compute_follow_direction(&self.creatures[idx], &self.creatures)
+                    {
+                        if try_creature_move_at(&mut self.creatures, idx, delta, &mut self.world) {
+                            creature.position = self.creatures[idx].position;
+                            creature.regulatory = self.creatures[idx].regulatory;
+                            creature.regulatory.apply_action_cost(
+                                FOLLOW_ENERGY_COST,
+                                FOLLOW_FATIGUE_COST,
+                            );
+                            self.creatures[idx].regulatory = creature.regulatory;
+                            action_counts.follow_count += 1;
+                        }
                     }
                 }
                 _ => {

@@ -11,6 +11,8 @@ pub mod logs;
 pub mod memory_dump;
 pub mod snapshots;
 
+pub use memory_dump::write_memory_graphml;
+
 #[derive(Debug, Error)]
 pub enum ExportError {
     #[error("IO error: {0}")]
