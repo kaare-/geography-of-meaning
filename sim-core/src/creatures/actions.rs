@@ -8,6 +8,7 @@ use crate::world::{
 };
 
 use super::creature::Creature;
+use super::spatial::compute_follow_direction;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Action {
@@ -44,7 +45,7 @@ impl Action {
     }
 }
 
-const FOLLOW_BASE_WEIGHT: f32 = 0.45;
+const FOLLOW_BASE_WEIGHT: f32 = 0.65;
 const EXPLORATION_RATE: f32 = 0.15;
 const PREDICTION_WEIGHT: f32 = 1.5;
 const EMIT_SOUND_BASE_WEIGHT: f32 = 0.15;
@@ -77,6 +78,7 @@ pub fn choose_action<R: Rng + ?Sized>(
     heard_signature: Option<u64>,
     heard_call_frequency: Option<f32>,
     prediction_ms: Option<&mut f64>,
+    others: &[Creature],
 ) -> Action {
     let push_dir = Vec3i::new(
         rng.gen_range(-1..=1),
@@ -152,6 +154,19 @@ pub fn choose_action<R: Rng + ?Sized>(
         }
     }
 
+    if !sleeping {
+        if compute_follow_direction(creature, others).is_some() {
+            if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
+                weights[i].1 += 1.2;
+            }
+        }
+    }
+
+    if creature.sensor.chemical_creature > 0.02 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
+            weights[i].1 += creature.sensor.chemical_creature * 3.5;
+        }
+    }
     if creature.sensor.chemical_creature > 0.05 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
             weights[i].1 += creature.sensor.chemical_creature * 2.0;

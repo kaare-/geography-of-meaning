@@ -35,6 +35,12 @@ pub struct SimulationConfig {
     pub progress_log: Option<PathBuf>,
     /// When set, append per-window timing CSV rows (header written once).
     pub timing_log: Option<PathBuf>,
+    /// Append creature (x,y,z) samples for trajectory maps.
+    pub trajectory_log: Option<PathBuf>,
+    /// Sample trajectory rows every N ticks (default 10 when log is set).
+    pub trajectory_every: u64,
+    /// If set, only these creature ids are logged; otherwise all living creatures.
+    pub trajectory_creature_ids: Option<Vec<u64>>,
     /// Ticks per simulated day (diurnal phase); mirrored from `world::TICKS_PER_DAY`.
     pub ticks_per_day: u64,
 }
@@ -55,6 +61,9 @@ impl Default for SimulationConfig {
             progress_every: 0,
             progress_log: None,
             timing_log: None,
+            trajectory_log: None,
+            trajectory_every: 10,
+            trajectory_creature_ids: None,
             ticks_per_day: TICKS_PER_DAY,
         }
     }

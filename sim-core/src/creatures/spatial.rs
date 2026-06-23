@@ -73,12 +73,16 @@ pub const TRANSFER_ORGANIC_FATIGUE_COST: f32 = 0.06;
 const TRANSFER_ORGANIC_AMOUNT: f32 = 0.04;
 const TRANSFER_ACTOR_CARRIED_MIN: f32 = 0.04;
 const TRANSFER_NEIGHBOR_ENERGY_MAX: f32 = 0.72;
+/// Squared distance (cells) within which Follow can orient toward another creature.
+const FOLLOW_DETECT_RANGE_SQ: f32 = 36.0;
 
-/// Step direction toward the adjacent neighbor with strongest creature-trace gradient.
+/// Step toward a nearby creature (within `FOLLOW_DETECT_RANGE_SQ`), weighted by proximity and neighbor energy.
+/// Returns `Vec3i::ZERO` when already adjacent (proximity maintenance, no move).
 pub fn compute_follow_direction(creature: &Creature, others: &[Creature]) -> Option<Vec3i> {
     let center = creature.position.floor_i();
-    let mut best_strength = 0.0f32;
-    let mut best_dir = None;
+    let mut approach_score = 0.0f32;
+    let mut approach_dir = None;
+    let mut adjacent_score = 0.0f32;
 
     for other in others {
         if other.id == creature.id {
@@ -88,20 +92,37 @@ pub fn compute_follow_direction(creature: &Creature, others: &[Creature]) -> Opt
         let dx = other_pos.x - center.x;
         let dy = other_pos.y - center.y;
         let dz = other_pos.z - center.z;
-        if dx.abs() > 1 || dy.abs() > 1 || dz.abs() > 1 {
-            continue;
-        }
         if dx == 0 && dy == 0 && dz == 0 {
             continue;
         }
         let dist_sq = (dx * dx + dy * dy + dz * dz) as f32;
-        let strength = 0.15 / dist_sq.max(1.0);
-        if strength > best_strength {
-            best_strength = strength;
-            best_dir = Some(Vec3i::new(dx.signum(), dy.signum(), dz.signum()));
+        if dist_sq > FOLLOW_DETECT_RANGE_SQ {
+            continue;
+        }
+        let proximity = 2.0 / dist_sq.max(1.0);
+        let social = 0.4 + creature.sensor.chemical_creature.max(0.0) * 2.0;
+        let leader = other.regulatory.energy * 0.5 + 0.25;
+        let score = proximity * social * leader;
+
+        if dist_sq <= 3.0 {
+            if score > adjacent_score {
+                adjacent_score = score;
+            }
+            continue;
+        }
+        if score > approach_score {
+            approach_score = score;
+            approach_dir = Some(Vec3i::new(dx.signum(), dy.signum(), dz.signum()));
         }
     }
-    best_dir
+
+    if let Some(dir) = approach_dir {
+        return Some(dir);
+    }
+    if adjacent_score > 0.0 {
+        return Some(Vec3i::ZERO);
+    }
+    None
 }
 
 pub fn try_creature_move_at(

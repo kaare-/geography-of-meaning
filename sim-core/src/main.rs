@@ -37,6 +37,18 @@ struct Args {
     /// Append per-window timing CSV rows (header written once).
     #[arg(long)]
     timing_log: Option<std::path::PathBuf>,
+
+    /// Append creature position samples for 2D trajectory maps (x–y plane).
+    #[arg(long)]
+    trajectory_log: Option<std::path::PathBuf>,
+
+    /// Sample trajectory rows every N ticks (default 10).
+    #[arg(long, default_value_t = 10)]
+    trajectory_every: u64,
+
+    /// Only log these creature ids (comma-separated). Default: all creatures.
+    #[arg(long, value_delimiter = ',')]
+    trajectory_creatures: Option<Vec<u64>>,
 }
 
 fn main() {
@@ -52,6 +64,9 @@ fn main() {
         progress_every: args.progress_every,
         progress_log: args.progress_log,
         timing_log: args.timing_log,
+        trajectory_log: args.trajectory_log.clone(),
+        trajectory_every: args.trajectory_every,
+        trajectory_creature_ids: args.trajectory_creatures.clone(),
         ..SimulationConfig::default()
     };
 
@@ -137,5 +152,12 @@ fn main() {
     }
     if let Some(gml) = graphml_path {
         println!("  GraphML export:{gml}");
+    }
+    if let Some(path) = &args.trajectory_log {
+        println!("  Trajectory:    {}", path.display());
+        println!(
+            "  Trajectory map: run `python3 analysis/scripts/plot_trajectories.py {}`",
+            path.display()
+        );
     }
 }

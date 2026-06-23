@@ -11,6 +11,7 @@ use crate::creatures::{
 use crate::world::{emit_environmental_sound, EnvironmentalSoundKind};
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::export::timing::{elapsed_ms, TickTimingMs, TimingWindow};
+use crate::export::trajectory::TrajectoryWriter;
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
 use crate::world::World;
 
@@ -29,6 +30,7 @@ pub struct Simulation {
     pub(crate) timing_window: TimingWindow,
     pub(crate) pending_export_ms: f64,
     pub(crate) pending_snapshot_ms: f64,
+    pub(crate) trajectory_writer: Option<TrajectoryWriter>,
 }
 
 impl Simulation {
@@ -69,6 +71,14 @@ impl Simulation {
         }
 
         let creature_count = config.creature_count;
+        let trajectory_writer = config.trajectory_log.as_ref().and_then(|path| {
+            TrajectoryWriter::open(
+                path,
+                config.trajectory_every,
+                config.trajectory_creature_ids.clone(),
+            )
+            .ok()
+        });
         Self {
             world,
             creatures,
@@ -82,6 +92,7 @@ impl Simulation {
             timing_window: TimingWindow::default(),
             pending_export_ms: 0.0,
             pending_snapshot_ms: 0.0,
+            trajectory_writer,
         }
     }
 
@@ -162,6 +173,7 @@ impl Simulation {
         let mut tick_merge = 0u32;
         let mut tick_split = 0u32;
 
+        let creatures_for_social = self.creatures.clone();
         for creature in &mut self.creatures {
             if creature.sleep.sleeping {
                 self.sleep_creature_ticks += 1;
@@ -194,6 +206,7 @@ impl Simulation {
                 heard_signature,
                 heard_call_frequency,
                 Some(&mut timing.prediction_ms),
+                &creatures_for_social,
             ));
             timing.action_selection_ms += elapsed_ms(action_start);
         }
@@ -260,7 +273,19 @@ impl Simulation {
                     if let Some(delta) =
                         compute_follow_direction(&self.creatures[idx], &self.creatures)
                     {
-                        if try_creature_move_at(&mut self.creatures, idx, delta, &mut self.world) {
+                        if delta.x == 0 && delta.y == 0 && delta.z == 0 {
+                            creature.regulatory.apply_action_cost(
+                                FOLLOW_ENERGY_COST * 0.5,
+                                FOLLOW_FATIGUE_COST * 0.5,
+                            );
+                            self.creatures[idx].regulatory = creature.regulatory;
+                            action_counts.follow_count += 1;
+                        } else if try_creature_move_at(
+                            &mut self.creatures,
+                            idx,
+                            delta,
+                            &mut self.world,
+                        ) {
                             creature.position = self.creatures[idx].position;
                             creature.regulatory = self.creatures[idx].regulatory;
                             creature.regulatory.apply_action_cost(
@@ -481,6 +506,12 @@ impl Simulation {
                 .emit(self.world.time, self.config.timing_log.as_deref())
             {
                 eprintln!("Timing report failed: {e}");
+            }
+        }
+
+        if let Some(writer) = &mut self.trajectory_writer {
+            if let Err(e) = writer.record(self.world.time, &self.creatures) {
+                eprintln!("Trajectory log failed: {e}");
             }
         }
     }
