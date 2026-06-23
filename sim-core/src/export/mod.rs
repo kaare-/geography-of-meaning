@@ -12,6 +12,7 @@ pub mod memory_dump;
 pub mod narrative;
 pub mod progress;
 pub mod snapshots;
+pub mod timing;
 
 pub use memory_dump::write_memory_graphml;
 

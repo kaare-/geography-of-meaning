@@ -10,6 +10,7 @@ use crate::creatures::{
 };
 use crate::world::{emit_environmental_sound, EnvironmentalSoundKind};
 use crate::export::logs::{ActionCounts, TickLogEntry};
+use crate::export::timing::{elapsed_ms, TickTimingMs, TimingWindow};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
 use crate::world::World;
 
@@ -25,6 +26,9 @@ pub struct Simulation {
     pub(crate) run_births: u64,
     pub(crate) run_deaths: u64,
     pub(crate) sleep_creature_ticks: u64,
+    pub(crate) timing_window: TimingWindow,
+    pub(crate) pending_export_ms: f64,
+    pub(crate) pending_snapshot_ms: f64,
 }
 
 impl Simulation {
@@ -75,10 +79,32 @@ impl Simulation {
             run_births: 0,
             run_deaths: 0,
             sleep_creature_ticks: 0,
+            timing_window: TimingWindow::default(),
+            pending_export_ms: 0.0,
+            pending_snapshot_ms: 0.0,
         }
     }
 
+    pub fn record_export_ms(&mut self, ms: f64) {
+        self.pending_export_ms += ms;
+    }
+
+    pub fn record_snapshot_ms(&mut self, ms: f64) {
+        self.pending_snapshot_ms += ms;
+    }
+
+    pub fn flush_timing_report(&mut self) -> std::io::Result<()> {
+        if self.timing_window.is_empty() {
+            return Ok(());
+        }
+        self.timing_window
+            .emit(self.world.time, self.config.timing_log.as_deref())
+    }
+
     pub fn tick(&mut self) {
+        let tick_start = std::time::Instant::now();
+        let mut timing = TickTimingMs::default();
+
         let rain_amount = if self.rng.gen::<f32>() < self.world.climate.rainfall_rate {
             self.rng.gen_range(0.05..0.2)
         } else {
@@ -89,17 +115,26 @@ impl Simulation {
             self.world.queue_rain(rain_amount);
         }
 
+        let world_start = std::time::Instant::now();
         self.world.process_events();
+        timing.world_update_ms += elapsed_ms(world_start);
 
         if self.config.climate_water_every_tick {
-            self.world.tick_climate_and_water();
+            let (climate_ms, water_ms) = self.world.tick_climate_and_water();
+            timing.climate_ms += climate_ms;
+            timing.water_ms += water_ms;
+            let groundwater_start = std::time::Instant::now();
             self.world.tick_groundwater();
+            timing.groundwater_ms += elapsed_ms(groundwater_start);
         }
 
         if self.config.erosion_tick_interval > 0
             && self.world.time % self.config.erosion_tick_interval == 0
         {
-            let collapses = self.world.tick_erosion(EROSION_DAMAGE_NUDGE);
+            let (collapses, physics_ms, erosion_ms) =
+                self.world.tick_erosion(EROSION_DAMAGE_NUDGE);
+            timing.physics_ms += physics_ms;
+            timing.erosion_ms += erosion_ms;
             for pos in collapses {
                 emit_environmental_sound(
                     &mut self.world,
@@ -110,7 +145,9 @@ impl Simulation {
             }
         }
 
+        let sounds_start = std::time::Instant::now();
         self.world.tick_sounds();
+        timing.world_update_ms += elapsed_ms(sounds_start);
 
         let timestamp = self.world.time;
         let day_phase = self.world.day_phase;
@@ -129,25 +166,36 @@ impl Simulation {
             if creature.sleep.sleeping {
                 self.sleep_creature_ticks += 1;
             }
-            let sleep_result = creature.update_sleep(dream_noise, &mut self.rng);
+            let (sleep_result, sleep_timing) = creature.update_sleep(dream_noise, &mut self.rng);
+            timing.sleep_ms += sleep_timing.sleep_ms;
+            timing.imagination_ms += sleep_timing.imagination_ms;
+            timing.concept_creation_ms += sleep_timing.concept_creation_ms;
+            timing.concept_merge_ms += sleep_timing.concept_merge_ms;
             tick_concepts_formed += sleep_result.concepts_formed;
             tick_imagination += sleep_result.imagination_events;
             tick_merge += sleep_result.merge_count;
             tick_split += sleep_result.split_count;
             creature.try_enter_sleep();
             creature.try_early_wake();
+            let concept_start = std::time::Instant::now();
             creature.refresh_active_concepts();
+            timing.concept_activation_ms += elapsed_ms(concept_start);
             let sleeping = creature.sleep.sleeping;
+            let comm_start = std::time::Instant::now();
             let heard_signature = dominant_heard_signature(creature, &self.world);
             let heard_call_frequency =
                 dominant_heard_call(creature, &self.world).map(|(_, freq)| freq);
+            timing.communication_ms += elapsed_ms(comm_start);
+            let action_start = std::time::Instant::now();
             chosen_actions.push(choose_action(
                 creature,
                 &mut self.rng,
                 sleeping,
                 heard_signature,
                 heard_call_frequency,
+                Some(&mut timing.prediction_ms),
             ));
+            timing.action_selection_ms += elapsed_ms(action_start);
         }
 
         let mut deaths = Vec::new();
@@ -158,6 +206,7 @@ impl Simulation {
         let mut novel_sensor_ticks = 0u32;
 
         for idx in 0..creature_count {
+            let creature_start = std::time::Instant::now();
             let action = chosen_actions[idx];
             let mut creature = self.creatures[idx].clone();
             let position_before = creature.position;
@@ -188,6 +237,7 @@ impl Simulation {
                 }
             }
 
+            let movement_start = std::time::Instant::now();
             match action {
                 Action::Move(delta) => {
                     if try_creature_move_at(&mut self.creatures, idx, delta, &mut self.world) {
@@ -229,7 +279,11 @@ impl Simulation {
                     }
                 }
                 _ => {
+                    let comm_action_start = std::time::Instant::now();
                     let _ = apply_action(&mut creature, action, &mut self.world);
+                    if matches!(action, Action::EmitSound) {
+                        timing.communication_ms += elapsed_ms(comm_action_start);
+                    }
                     self.creatures[idx].regulatory = creature.regulatory;
                     self.creatures[idx].position = creature.position;
                     match action {
@@ -242,8 +296,10 @@ impl Simulation {
                     }
                 }
             }
+            timing.movement_ms += elapsed_ms(movement_start);
 
             creature.regulatory.apply_passive_hydration(&creature.sensor);
+            creature.regulatory.apply_dehydration_stress();
             creature
                 .regulatory
                 .apply_ambient_processing_cost(creature.sensor.sound_ambient);
@@ -256,6 +312,7 @@ impl Simulation {
                 &mut self.rng,
                 noise_mult,
             );
+            let memory_graph_start = std::time::Instant::now();
             if !sleeping {
                 let heard = creature
                     .sensor
@@ -265,9 +322,13 @@ impl Simulation {
                     creature
                         .memory_graph
                         .record_heard_sound(creature.sensor, heard, sig);
+                    timing.communication_ms += elapsed_ms(memory_graph_start);
                 }
             }
+            timing.memory_graph_ms += elapsed_ms(memory_graph_start);
+            let concept_start = std::time::Instant::now();
             creature.refresh_active_concepts();
+            timing.concept_activation_ms += elapsed_ms(concept_start);
             if !sleeping && creature.memory_graph.novelty_score(creature.sensor) > 0.65 {
                 novel_sensor_ticks += 1;
             }
@@ -296,6 +357,7 @@ impl Simulation {
                     cause,
                 });
                 deposit_creature_organic(&mut self.world, &creature);
+                timing.creature_update_ms += elapsed_ms(creature_start);
                 continue;
             }
 
@@ -310,10 +372,13 @@ impl Simulation {
                 timestamp,
             };
 
+            let memory_start = std::time::Instant::now();
             if !sleeping {
                 creature.memory_graph.record_experience(&exp);
             }
             creature.push_experience(exp);
+            timing.memory_ms += elapsed_ms(memory_start);
+            timing.creature_update_ms += elapsed_ms(creature_start);
             surviving.push(creature);
         }
 
@@ -357,8 +422,10 @@ impl Simulation {
                 .apply_reproduction_cost(REPRODUCTION_ENERGY_COST);
         }
 
+        let refresh_start = std::time::Instant::now();
         self.world
             .refresh_active_chunks(self.creatures.iter().map(|c| c.position));
+        timing.world_update_ms += elapsed_ms(refresh_start);
 
         self.tick_logs.push(TickLogEntry {
             tick: timestamp,
@@ -398,9 +465,22 @@ impl Simulation {
                 .collect(),
         });
 
+        timing.export_ms = self.pending_export_ms;
+        timing.snapshot_ms = self.pending_snapshot_ms;
+        self.pending_export_ms = 0.0;
+        self.pending_snapshot_ms = 0.0;
+        timing.total_tick_ms = elapsed_ms(tick_start);
+        self.timing_window.record(timing);
+
         if self.config.progress_every > 0 && self.world.time % self.config.progress_every == 0 {
             if let Err(e) = crate::export::progress::emit_progress(self, tick_imagination) {
                 eprintln!("Progress report failed: {e}");
+            }
+            if let Err(e) = self
+                .timing_window
+                .emit(self.world.time, self.config.timing_log.as_deref())
+            {
+                eprintln!("Timing report failed: {e}");
             }
         }
     }

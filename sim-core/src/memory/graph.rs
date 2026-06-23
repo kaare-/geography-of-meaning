@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rand::Rng;
 
 use crate::creatures::actions::Action;
 use crate::creatures::creature::Experience;
 use crate::creatures::sensors::SensorState;
+use crate::math::Vec3i;
 use serde::Serialize;
 
 use super::concepts::{ActiveConcept, ConceptNode};
@@ -17,11 +18,32 @@ const MIN_CONCEPT_CLUSTER_SIZE: usize = 2;
 const SPREAD_DECAY: f32 = 0.5;
 const SPREAD_DECAY_HOP2: f32 = 0.25;
 const CO_OCCURS_SPREAD_WEIGHT: f32 = 0.35;
-const CONCEPT_MERGE_THRESHOLD: f32 = 0.88;
-const CONCEPT_SPLIT_VARIANCE_THRESHOLD: f32 = 0.12;
+const CONCEPT_MERGE_THRESHOLD: f32 = 0.84;
+const CONCEPT_SPLIT_VARIANCE_THRESHOLD: f32 = 0.20;
+const MIN_CONCEPT_SPLIT_MEMBERS: usize = 6;
 const PROTOTYPE_EMA_ALPHA: f32 = 0.15;
 const IMAGINATION_SPREAD_STRENGTHEN: f32 = 0.02;
+const IMAGINATION_EDGE_BUDGET: usize = 1500;
+const EDGE_PRUNE_STRENGTH_THRESHOLD: f32 = 0.015;
+const MIN_EDGE_OBSERVATIONS_TO_KEEP: u32 = 2;
 const DELAY_WEIGHT_SCALE: f32 = 0.1;
+const OUTCOME_QUANTUM: f32 = 0.05;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CanonicalActionKey {
+    Move,
+    Push,
+    ConsumeOrganic,
+    Rest,
+    EmitSound,
+    Follow,
+    Dig,
+    Carry,
+    Drop,
+    PlaceMaterial,
+    ApplyBinder,
+    TransferOrganic,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ConsolidationResult {
@@ -60,6 +82,10 @@ pub struct MemoryGraph {
     pub nodes: Vec<MemoryNode>,
     pub edges: Vec<MemoryEdge>,
     next_id: NodeId,
+    node_index: HashMap<NodeId, usize>,
+    edges_by_source: HashMap<NodeId, Vec<usize>>,
+    action_nodes: HashMap<CanonicalActionKey, NodeId>,
+    outcome_nodes: HashMap<i32, NodeId>,
 }
 
 impl MemoryGraph {
@@ -67,11 +93,31 @@ impl MemoryGraph {
         Self::default()
     }
 
+    fn node_by_id(&self, id: NodeId) -> Option<&MemoryNode> {
+        self.node_index.get(&id).map(|&i| &self.nodes[i])
+    }
+
+    fn push_edge(&mut self, edge: MemoryEdge) {
+        let idx = self.edges.len();
+        self.edges_by_source
+            .entry(edge.source_id)
+            .or_default()
+            .push(idx);
+        self.edges.push(edge);
+    }
+
+    fn outgoing_edges(&self, source_id: NodeId) -> &[usize] {
+        self.edges_by_source
+            .get(&source_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
     pub fn record_experience(&mut self, exp: &Experience) {
         let sensory_before = self.find_or_create_sensory(exp.sensory_before);
         let sensory_after = self.find_or_create_sensory(exp.sensory_after);
-        let action_id = self.create_node(NodeKind::Action(exp.action));
-        let outcome_id = self.create_node(NodeKind::Outcome(exp.outcome));
+        let action_id = self.find_or_create_action(exp.action);
+        let outcome_id = self.find_or_create_outcome(exp.outcome);
 
         self.add_or_strengthen_edge(sensory_before, action_id, EdgeType::Precedes);
         self.add_or_strengthen_edge(action_id, outcome_id, EdgeType::ActionLeadsTo);
@@ -91,7 +137,7 @@ impl MemoryGraph {
     }
 
     pub fn record_heard_sound(&mut self, sensory: SensorState, intensity: f32, signature: u64) {
-        if intensity < 0.08 {
+        if intensity < 0.06 {
             return;
         }
         let sensory_id = self.find_or_create_sensory(sensory);
@@ -120,7 +166,7 @@ impl MemoryGraph {
         }
         by_sig
             .values()
-            .filter(|(total, w)| *w > 0.05 && *total / *w > 0.03)
+            .filter(|(total, w)| *w > 0.03 && *total / *w > 0.01)
             .count()
     }
 
@@ -129,12 +175,12 @@ impl MemoryGraph {
         let Some(sig) = heard_signature else {
             return 0.0;
         };
-        if sound_calls < 0.08 {
+        if sound_calls < 0.05 {
             return 0.0;
         }
         let outcome = self.signature_mean_outcome(sig);
-        if outcome > 0.03 {
-            sound_calls * outcome * 2.0
+        if outcome > 0.01 {
+            sound_calls * outcome * 2.5
         } else {
             0.0
         }
@@ -148,13 +194,13 @@ impl MemoryGraph {
         heard_signature: Option<u64>,
         heard_call_frequency: Option<f32>,
     ) -> f32 {
-        if bias < 0.01 || sound_calls < 0.08 {
+        if bias < 0.01 || sound_calls < 0.05 {
             return 0.0;
         }
         let Some(freq) = heard_call_frequency else {
             return 0.0;
         };
-        if freq < 0.55 {
+        if freq < 0.40 {
             return 0.0;
         }
         let Some(sig) = heard_signature else {
@@ -188,28 +234,33 @@ impl MemoryGraph {
             let Some(sensory_id) = self.find_similar_sensory(exp.sensory_before, 0.75) else {
                 continue;
             };
-            for edge in &mut self.edges {
-                if edge.source_id == sensory_id && edge.edge_type == EdgeType::Precedes {
-                    if let Some(target) = self.nodes.iter().find(|n| n.id == edge.target_id) {
-                        if let NodeKind::Action(action) = target.kind {
-                            if action_matches(action, exp.action) {
-                                if exp.outcome > 0.0 {
-                                    edge.strength = (edge.strength + 0.05).min(1.0);
-                                    edge.confidence = (edge.confidence + 0.03).min(1.0);
-                                } else if exp.outcome < 0.0 {
-                                    edge.strength = (edge.strength - 0.04).max(0.0);
-                                }
-                            }
-                        }
-                    }
+            for ei in self.outgoing_edges(sensory_id).to_vec() {
+                if self.edges[ei].edge_type != EdgeType::Precedes {
+                    continue;
+                }
+                let target_id = self.edges[ei].target_id;
+                let action_match = self
+                    .node_by_id(target_id)
+                    .map(|n| matches!(n.kind, NodeKind::Action(a) if action_matches(a, exp.action)))
+                    .unwrap_or(false);
+                if !action_match {
+                    continue;
+                }
+                let edge = &mut self.edges[ei];
+                if exp.outcome > 0.0 {
+                    edge.strength = (edge.strength + 0.05).min(1.0);
+                    edge.confidence = (edge.confidence + 0.03).min(1.0);
+                } else if exp.outcome < 0.0 {
+                    edge.strength = (edge.strength - 0.04).max(0.0);
                 }
             }
         }
         for edge in &mut self.edges {
-            if edge.observations < 2 {
+            if edge.observations < MIN_EDGE_OBSERVATIONS_TO_KEEP {
                 edge.strength = (edge.strength - 0.02).max(0.0);
             }
         }
+        self.prune_weak_edges();
         let mut concepts = self.cluster_sensory_concepts(next_concept_id, existing_concepts);
         concepts.extend(self.merge_loose_sensory_into_concepts(next_concept_id, existing_concepts));
         let merge_count = self.merge_similar_concept_nodes(&mut concepts);
@@ -231,12 +282,16 @@ impl MemoryGraph {
         if self.nodes.is_empty() {
             return 0;
         }
-        let active = if !concepts.is_empty() && rng.gen::<f32>() < 0.7 {
+        let events = if !concepts.is_empty() && rng.gen::<f32>() < 0.7 {
             let concept = &concepts[rng.gen_range(0..concepts.len())];
-            vec![ActiveConcept {
+            let active = vec![ActiveConcept {
                 concept_id: concept.id,
                 activation: 0.55,
-            }]
+            }];
+            let spread = self.spread_activation(&active, concepts);
+            let sources: Vec<NodeId> = spread.keys().copied().collect();
+            let candidates = self.collect_outgoing_edge_indices(sources.into_iter());
+            self.strengthen_budgeted_edges(candidates, IMAGINATION_EDGE_BUDGET)
         } else {
             let sensory_nodes: Vec<NodeId> = self
                 .nodes
@@ -252,31 +307,79 @@ impl MemoryGraph {
             let id = sensory_nodes[rng.gen_range(0..sensory_nodes.len())];
             let mut activation = HashMap::new();
             activation.insert(id, 0.5);
-            let hop1 = Self::spread_hop(&self.edges, &activation, SPREAD_DECAY);
-            let mut events = 0u32;
-            for edge in &mut self.edges {
-                if hop1.contains_key(&edge.source_id) {
-                    edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
-                    events += 1;
-                }
-            }
-            if dream_noise {
-                self.apply_dream_noise(rng);
-            }
-            return events;
+            let hop1 = Self::spread_hop(
+                &self.edges,
+                &self.edges_by_source,
+                &activation,
+                SPREAD_DECAY,
+            );
+            let mut sources: HashSet<NodeId> = activation.keys().copied().collect();
+            sources.extend(hop1.keys().copied());
+            let candidates = self.collect_outgoing_edge_indices(sources.into_iter());
+            self.strengthen_budgeted_edges(candidates, IMAGINATION_EDGE_BUDGET)
         };
-        let spread = self.spread_activation(&active, concepts);
-        let mut events = 0u32;
-        for edge in &mut self.edges {
-            if spread.contains_key(&edge.source_id) {
-                edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
-                events += 1;
-            }
-        }
         if dream_noise {
             self.apply_dream_noise(rng);
         }
         events
+    }
+
+    fn collect_outgoing_edge_indices(
+        &self,
+        sources: impl Iterator<Item = NodeId>,
+    ) -> Vec<usize> {
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        for source_id in sources {
+            for &ei in self.outgoing_edges(source_id) {
+                if seen.insert(ei) {
+                    out.push(ei);
+                }
+            }
+        }
+        out
+    }
+
+    fn strengthen_budgeted_edges(&mut self, candidate_indices: Vec<usize>, budget: usize) -> u32 {
+        if candidate_indices.is_empty() {
+            return 0;
+        }
+        let mut scored: Vec<(f32, usize)> = candidate_indices
+            .into_iter()
+            .map(|ei| {
+                let e = &self.edges[ei];
+                (e.strength * e.confidence, ei)
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let mut events = 0u32;
+        for (_, ei) in scored.into_iter().take(budget) {
+            let edge = &mut self.edges[ei];
+            edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
+            events += 1;
+        }
+        events
+    }
+
+    fn prune_weak_edges(&mut self) {
+        let before = self.edges.len();
+        self.edges.retain(|e| {
+            e.strength >= EDGE_PRUNE_STRENGTH_THRESHOLD
+                || e.observations >= MIN_EDGE_OBSERVATIONS_TO_KEEP
+        });
+        if self.edges.len() != before {
+            self.rebuild_edge_index();
+        }
+    }
+
+    fn rebuild_edge_index(&mut self) {
+        self.edges_by_source.clear();
+        for (idx, edge) in self.edges.iter().enumerate() {
+            self.edges_by_source
+                .entry(edge.source_id)
+                .or_default()
+                .push(idx);
+        }
     }
 
     fn apply_dream_noise<R: Rng + ?Sized>(&mut self, rng: &mut R) {
@@ -311,17 +414,27 @@ impl MemoryGraph {
         concepts: &[ConceptNode],
     ) -> f32 {
         let spread = self.spread_activation(active_concepts, concepts);
+        self.prediction_uncertainty_with_spread(sensory, &spread)
+    }
+
+    pub fn prediction_uncertainty_with_spread(
+        &self,
+        sensory: SensorState,
+        spread: &HashMap<NodeId, f32>,
+    ) -> f32 {
         let sensory_id = self.find_similar_sensory(sensory, 0.8);
         let mut confidences = Vec::new();
-        for edge in &self.edges {
-            if edge.edge_type != EdgeType::Precedes {
-                continue;
-            }
-            let source_weight = source_activation_weight(sensory_id, edge.source_id, &spread);
+        for source_id in self.prediction_source_ids(sensory_id, spread) {
+            let source_weight = source_activation_weight(sensory_id, source_id, spread);
             if source_weight < 1e-6 {
                 continue;
             }
-            confidences.push(edge.confidence);
+            for &ei in self.outgoing_edges(source_id) {
+                let edge = &self.edges[ei];
+                if edge.edge_type == EdgeType::Precedes {
+                    confidences.push(edge.confidence);
+                }
+            }
         }
         if confidences.is_empty() {
             return 1.0;
@@ -336,7 +449,7 @@ impl MemoryGraph {
         &mut self,
         parent: &MemoryGraph,
         parent_concept: &ConceptNode,
-        inherited: &ConceptNode,
+        _inherited: &ConceptNode,
     ) -> NodeId {
         let offspring_concept_id = self.create_node(NodeKind::Concept);
         let Some(parent_mem_id) = parent.concept_memory_node_for(parent_concept) else {
@@ -346,26 +459,37 @@ impl MemoryGraph {
             if edge.source_id != parent_mem_id || edge.edge_type != EdgeType::ConceptCompresses {
                 continue;
             }
-            if parent
-                .nodes
-                .iter()
-                .any(|n| n.id == edge.target_id && matches!(n.kind, NodeKind::SensoryPattern(_)))
-            {
+            let Some(parent_node) = parent.node_by_id(edge.target_id) else {
                 continue;
-            }
-            self.edges.push(MemoryEdge {
-                source_id: offspring_concept_id,
-                target_id: edge.target_id,
-                edge_type: EdgeType::ConceptCompresses,
-                strength: edge.strength * 0.5,
-                confidence: edge.confidence * 0.5,
-                observations: 1,
-                delay_mean: edge.delay_mean,
-                delay_variance: edge.delay_variance,
-            });
+            };
+            let target_id = match parent_node.kind {
+                NodeKind::SensoryPattern(pattern) => self.find_or_create_sensory(pattern),
+                _ => continue,
+            };
+            self.add_or_strengthen_edge(
+                offspring_concept_id,
+                target_id,
+                EdgeType::ConceptCompresses,
+            );
         }
-        let _ = inherited;
         offspring_concept_id
+    }
+
+    /// Member sensory node ids linked to a concept memory node.
+    pub fn concept_members_for(&self, concept_mem_id: NodeId) -> Vec<NodeId> {
+        self.concept_members(concept_mem_id)
+    }
+
+    /// Refresh `member_node_ids` from graph `ConceptCompresses` edges after sleep consolidation.
+    pub fn sync_concept_members(&self, concepts: &mut [ConceptNode]) {
+        for concept in concepts {
+            if let Some(mem_id) = self.concept_memory_node_for(concept) {
+                let members = self.concept_members(mem_id);
+                if !members.is_empty() {
+                    concept.member_node_ids = members;
+                }
+            }
+        }
     }
 
     fn concept_memory_node_for(&self, concept: &ConceptNode) -> Option<NodeId> {
@@ -407,10 +531,16 @@ impl MemoryGraph {
     }
 
     fn concept_members(&self, concept_node_id: NodeId) -> Vec<NodeId> {
-        self.edges
+        self.outgoing_edges(concept_node_id)
             .iter()
-            .filter(|e| e.source_id == concept_node_id && e.edge_type == EdgeType::ConceptCompresses)
-            .map(|e| e.target_id)
+            .filter_map(|&ei| {
+                let e = &self.edges[ei];
+                if e.edge_type == EdgeType::ConceptCompresses {
+                    Some(e.target_id)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -418,7 +548,7 @@ impl MemoryGraph {
         let mut proto = fallback;
         let mut count = 0usize;
         for &mid in members {
-            if let Some(node) = self.nodes.iter().find(|n| n.id == mid) {
+            if let Some(node) = self.node_by_id(mid) {
                 if let NodeKind::SensoryPattern(p) = node.kind {
                     if count == 0 {
                         proto = p;
@@ -472,12 +602,16 @@ impl MemoryGraph {
                     continue;
                 }
                 let compresses_members: Vec<NodeId> = self
-                    .edges
+                    .outgoing_edges(node.id)
                     .iter()
-                    .filter(|e| {
-                        e.source_id == node.id && e.edge_type == EdgeType::ConceptCompresses
+                    .filter_map(|&ei| {
+                        let e = &self.edges[ei];
+                        if e.edge_type == EdgeType::ConceptCompresses {
+                            Some(e.target_id)
+                        } else {
+                            None
+                        }
                     })
-                    .map(|e| e.target_id)
                     .collect();
                 if compresses_members.is_empty() {
                     continue;
@@ -494,12 +628,12 @@ impl MemoryGraph {
             }
         }
 
-        let hop1 = Self::spread_hop(&self.edges, &activation, SPREAD_DECAY);
+        let hop1 = Self::spread_hop(&self.edges, &self.edges_by_source, &activation, SPREAD_DECAY);
         for (&node, &act) in &hop1 {
             *activation.entry(node).or_insert(0.0) += act;
         }
 
-        let hop2 = Self::spread_hop(&self.edges, &hop1, SPREAD_DECAY_HOP2);
+        let hop2 = Self::spread_hop(&self.edges, &self.edges_by_source, &hop1, SPREAD_DECAY_HOP2);
         for (node, act) in hop2 {
             *activation.entry(node).or_insert(0.0) += act;
         }
@@ -509,6 +643,7 @@ impl MemoryGraph {
 
     fn spread_hop(
         edges: &[MemoryEdge],
+        edges_by_source: &HashMap<NodeId, Vec<usize>>,
         sources: &HashMap<NodeId, f32>,
         decay: f32,
     ) -> HashMap<NodeId, f32> {
@@ -518,10 +653,8 @@ impl MemoryGraph {
             if hop < 1e-6 {
                 continue;
             }
-            for edge in edges {
-                if edge.source_id != source {
-                    continue;
-                }
+            for &ei in edges_by_source.get(&source).into_iter().flat_map(|v| v.iter()) {
+                let edge = &edges[ei];
                 let edge_weight = match edge.edge_type {
                     EdgeType::Precedes | EdgeType::ConceptCompresses => edge.strength.max(0.1),
                     EdgeType::CoOccurs => edge.strength.max(0.1) * CO_OCCURS_SPREAD_WEIGHT,
@@ -572,73 +705,107 @@ impl MemoryGraph {
         concepts: &[ConceptNode],
     ) -> ActionPredictions {
         let spread = self.spread_activation(active_concepts, concepts);
+        self.predict_action_outcomes_with_spread(sensory, &spread)
+    }
+
+    pub fn predict_action_outcomes_with_spread(
+        &self,
+        sensory: SensorState,
+        spread: &HashMap<NodeId, f32>,
+    ) -> ActionPredictions {
         let mut predictions = ActionPredictions::default();
         let sensory_id = self.find_similar_sensory(sensory, 0.8);
 
-        for edge in &self.edges {
-            if edge.edge_type != EdgeType::Precedes {
-                continue;
-            }
-            let source_weight = source_activation_weight(sensory_id, edge.source_id, &spread);
+        for source_id in self.prediction_source_ids(sensory_id, spread) {
+            let source_weight = source_activation_weight(sensory_id, source_id, spread);
             if source_weight < 1e-6 {
                 continue;
             }
-            let action_node = self.nodes.iter().find(|n| n.id == edge.target_id);
-            let Some(NodeKind::Action(action)) = action_node.map(|n| n.kind) else {
-                continue;
-            };
-            let predicted_delta = self.predict_outcome_for_action(edge.target_id);
-                let weight = edge.strength * edge.confidence * source_weight * delay_weight(edge.delay_mean);
-            accumulate_action_prediction(&mut predictions, action, predicted_delta * weight);
-        }
-
-        for edge in &self.edges {
-            if edge.edge_type != EdgeType::SoundActivates {
-                continue;
-            }
-            let sound_node = self.nodes.iter().find(|n| n.id == edge.source_id);
-            let Some(NodeKind::Sound(sound)) = sound_node.map(|n| n.kind) else {
-                continue;
-            };
-            let sig_boost = self.signature_outcome_boost(sound.signature);
-            let sensory_id_activated = edge.target_id;
-            let sensory_weight = if sensory_id == Some(sensory_id_activated) {
-                1.0
-            } else {
-                spread.get(&sensory_id_activated).copied().unwrap_or(0.0)
-            };
-            if sensory_weight < 1e-6 {
-                continue;
-            }
-            let sound_weight = edge.strength * edge.confidence * sig_boost * sensory_weight;
-
-            for pedge in &self.edges {
-                if pedge.edge_type != EdgeType::Precedes || pedge.source_id != sensory_id_activated {
+            for &ei in self.outgoing_edges(source_id) {
+                let edge = &self.edges[ei];
+                if edge.edge_type != EdgeType::Precedes {
                     continue;
                 }
-                let action_node = self.nodes.iter().find(|n| n.id == pedge.target_id);
+                let action_node = self.node_by_id(edge.target_id);
                 let Some(NodeKind::Action(action)) = action_node.map(|n| n.kind) else {
                     continue;
                 };
-                let predicted_delta = self.predict_outcome_for_action(pedge.target_id);
-                let weight = pedge.strength * pedge.confidence * sound_weight;
+                let predicted_delta = self.predict_outcome_for_action(edge.target_id);
+                let weight =
+                    edge.strength * edge.confidence * source_weight * delay_weight(edge.delay_mean);
                 accumulate_action_prediction(&mut predictions, action, predicted_delta * weight);
+            }
+        }
+
+        for node in &self.nodes {
+            let NodeKind::Sound(sound) = node.kind else {
+                continue;
+            };
+            for &ei in self.outgoing_edges(node.id) {
+                let edge = &self.edges[ei];
+                if edge.edge_type != EdgeType::SoundActivates {
+                    continue;
+                }
+                let sig_boost = self.signature_outcome_boost(sound.signature);
+                let sensory_id_activated = edge.target_id;
+                let sensory_weight = if sensory_id == Some(sensory_id_activated) {
+                    1.0
+                } else {
+                    spread.get(&sensory_id_activated).copied().unwrap_or(0.0)
+                };
+                if sensory_weight < 1e-6 {
+                    continue;
+                }
+                let sound_weight = edge.strength * edge.confidence * sig_boost * sensory_weight;
+
+                for &pei in self.outgoing_edges(sensory_id_activated) {
+                    let pedge = &self.edges[pei];
+                    if pedge.edge_type != EdgeType::Precedes {
+                        continue;
+                    }
+                    let action_node = self.node_by_id(pedge.target_id);
+                    let Some(NodeKind::Action(action)) = action_node.map(|n| n.kind) else {
+                        continue;
+                    };
+                    let predicted_delta = self.predict_outcome_for_action(pedge.target_id);
+                    let weight = pedge.strength * pedge.confidence * sound_weight;
+                    accumulate_action_prediction(&mut predictions, action, predicted_delta * weight);
+                }
             }
         }
 
         predictions
     }
 
+    fn prediction_source_ids(
+        &self,
+        sensory_id: Option<NodeId>,
+        spread: &HashMap<NodeId, f32>,
+    ) -> Vec<NodeId> {
+        let mut sources = Vec::new();
+        if let Some(sid) = sensory_id {
+            sources.push(sid);
+        }
+        for &id in spread.keys() {
+            if sensory_id != Some(id) {
+                sources.push(id);
+            }
+        }
+        sources
+    }
+
     fn sound_node_outcome_stats(&self, sound_id: NodeId) -> (f32, f32) {
         let mut total = 0.0f32;
         let mut weight_sum = 0.0f32;
-        for edge in &self.edges {
-            if edge.source_id != sound_id || edge.edge_type != EdgeType::SoundActivates {
+        for &ei in self.outgoing_edges(sound_id) {
+            let edge = &self.edges[ei];
+            if edge.edge_type != EdgeType::SoundActivates {
                 continue;
             }
             let sensory_id = edge.target_id;
-            for pedge in &self.edges {
-                if pedge.edge_type != EdgeType::Precedes || pedge.source_id != sensory_id {
+            for &pei in self.outgoing_edges(sensory_id) {
+                let pedge = &self.edges[pei];
+                if pedge.edge_type != EdgeType::Precedes {
                     continue;
                 }
                 let predicted = self.predict_outcome_for_action(pedge.target_id);
@@ -689,14 +856,16 @@ impl MemoryGraph {
     fn predict_outcome_for_action(&self, action_id: NodeId) -> f32 {
         let mut total = 0.0f32;
         let mut weight_sum = 0.0f32;
-        for edge in &self.edges {
-            if edge.source_id == action_id && edge.edge_type == EdgeType::ActionLeadsTo {
-                if let Some(node) = self.nodes.iter().find(|n| n.id == edge.target_id) {
-                    if let NodeKind::Outcome(outcome) = node.kind {
-                        let w = edge.strength * edge.confidence;
-                        total += outcome * w;
-                        weight_sum += w;
-                    }
+        for &ei in self.outgoing_edges(action_id) {
+            let edge = &self.edges[ei];
+            if edge.edge_type != EdgeType::ActionLeadsTo {
+                continue;
+            }
+            if let Some(node) = self.node_by_id(edge.target_id) {
+                if let NodeKind::Outcome(outcome) = node.kind {
+                    let w = edge.strength * edge.confidence;
+                    total += outcome * w;
+                    weight_sum += w;
                 }
             }
         }
@@ -714,10 +883,33 @@ impl MemoryGraph {
         self.create_node(NodeKind::SensoryPattern(pattern))
     }
 
+    fn find_or_create_action(&mut self, action: Action) -> NodeId {
+        let key = canonical_action_key(action);
+        if let Some(&id) = self.action_nodes.get(&key) {
+            return id;
+        }
+        let id = self.create_node(NodeKind::Action(canonical_action_node(action)));
+        self.action_nodes.insert(key, id);
+        id
+    }
+
+    fn find_or_create_outcome(&mut self, outcome: f32) -> NodeId {
+        let quantized = quantize_outcome(outcome);
+        let key = outcome_key(quantized);
+        if let Some(&id) = self.outcome_nodes.get(&key) {
+            return id;
+        }
+        let id = self.create_node(NodeKind::Outcome(quantized));
+        self.outcome_nodes.insert(key, id);
+        id
+    }
+
     fn create_node(&mut self, kind: NodeKind) -> NodeId {
         let id = self.next_id;
         self.next_id += 1;
+        let idx = self.nodes.len();
         self.nodes.push(MemoryNode { id, kind });
+        self.node_index.insert(id, idx);
         id
     }
 
@@ -959,7 +1151,7 @@ impl MemoryGraph {
         let mut split_count = 0u32;
         let mut new_splits = Vec::new();
         for concept in concepts.iter_mut() {
-            if concept.member_node_ids.len() < 4 {
+            if concept.member_node_ids.len() < MIN_CONCEPT_SPLIT_MEMBERS {
                 continue;
             }
             let mut outliers = Vec::new();
@@ -1013,7 +1205,7 @@ impl MemoryGraph {
             edge.strength = (edge.strength + 0.1).min(1.0);
             edge.confidence = (edge.confidence + 0.05).min(1.0);
         } else {
-            self.edges.push(MemoryEdge {
+            self.push_edge(MemoryEdge {
                 source_id: source,
                 target_id: target,
                 edge_type,
@@ -1103,6 +1295,39 @@ fn delay_weight(delay_mean: f32) -> f32 {
     (1.0 / (1.0 + delay_mean * DELAY_WEIGHT_SCALE)).clamp(0.3, 1.0)
 }
 
+fn canonical_action_key(action: Action) -> CanonicalActionKey {
+    match action {
+        Action::Move(_) => CanonicalActionKey::Move,
+        Action::Push(_) => CanonicalActionKey::Push,
+        Action::ConsumeOrganic => CanonicalActionKey::ConsumeOrganic,
+        Action::Rest => CanonicalActionKey::Rest,
+        Action::EmitSound => CanonicalActionKey::EmitSound,
+        Action::Follow => CanonicalActionKey::Follow,
+        Action::Dig => CanonicalActionKey::Dig,
+        Action::Carry => CanonicalActionKey::Carry,
+        Action::Drop => CanonicalActionKey::Drop,
+        Action::PlaceMaterial => CanonicalActionKey::PlaceMaterial,
+        Action::ApplyBinder => CanonicalActionKey::ApplyBinder,
+        Action::TransferOrganic => CanonicalActionKey::TransferOrganic,
+    }
+}
+
+fn canonical_action_node(action: Action) -> Action {
+    match action {
+        Action::Move(_) => Action::Move(Vec3i::ZERO),
+        Action::Push(_) => Action::Push(Vec3i::ZERO),
+        other => other,
+    }
+}
+
+fn quantize_outcome(outcome: f32) -> f32 {
+    (outcome / OUTCOME_QUANTUM).round() * OUTCOME_QUANTUM
+}
+
+fn outcome_key(quantized: f32) -> i32 {
+    (quantized * 1000.0).round() as i32
+}
+
 fn ema_sensor(prev: SensorState, new: SensorState, alpha: f32) -> SensorState {
     let vp = prev.as_vector();
     let vn = new.as_vector();
@@ -1133,6 +1358,69 @@ mod tests {
             outcome,
             timestamp: 1,
         }
+    }
+
+    #[test]
+    fn imagination_replay_respects_edge_budget() {
+        let mut graph = MemoryGraph::new();
+        let sensory = graph.create_node(NodeKind::SensoryPattern(SensorState::default()));
+        let action = graph.create_node(NodeKind::Action(Action::Rest));
+        for i in 0..2000 {
+            graph.push_edge(MemoryEdge {
+                source_id: sensory,
+                target_id: action,
+                edge_type: EdgeType::Precedes,
+                strength: 0.1 + (i as f32 * 0.0001),
+                confidence: 0.5,
+                observations: 3,
+                delay_mean: 1.0,
+                delay_variance: 0.2,
+            });
+        }
+        let mut rng = rand::thread_rng();
+        let events = graph.imagination_replay(&[], false, &mut rng);
+        assert!(events <= IMAGINATION_EDGE_BUDGET as u32);
+        assert!(events > 0);
+    }
+
+    #[test]
+    fn consolidate_sleep_prunes_weak_edges() {
+        let mut graph = MemoryGraph::new();
+        let exp = sample_experience(0.2);
+        graph.record_experience(&exp);
+        let sensory = graph
+            .nodes
+            .iter()
+            .find_map(|n| match n.kind {
+                NodeKind::SensoryPattern(_) => Some(n.id),
+                _ => None,
+            })
+            .expect("sensory node");
+        let weak_target = graph.create_node(NodeKind::Action(Action::Dig));
+        graph.push_edge(MemoryEdge {
+            source_id: sensory,
+            target_id: weak_target,
+            edge_type: EdgeType::Precedes,
+            strength: 0.005,
+            confidence: 0.01,
+            observations: 1,
+            delay_mean: 1.0,
+            delay_variance: 0.5,
+        });
+        let before = graph.edges.len();
+        let _ = graph.consolidate_sleep(&[exp], &mut 1, &[]);
+        assert!(graph.edges.len() < before);
+    }
+
+    #[test]
+    fn canonical_action_and_outcome_nodes_deduplicate() {
+        let mut graph = MemoryGraph::new();
+        for _ in 0..50 {
+            graph.record_experience(&sample_experience(0.02));
+        }
+        let summary = graph.node_summary();
+        assert_eq!(summary.action, 1, "Rest actions should share one node");
+        assert_eq!(summary.outcome, 1, "Quantized outcomes should share one node");
     }
 
     #[test]
@@ -1176,7 +1464,7 @@ mod tests {
         };
         graph.record_experience(&exp2);
         if let Some(s2) = graph.find_similar_sensory(sensory2, 0.5) {
-            graph.edges.push(MemoryEdge {
+            graph.push_edge(MemoryEdge {
                 source_id: s1,
                 target_id: s2,
                 edge_type: EdgeType::Precedes,

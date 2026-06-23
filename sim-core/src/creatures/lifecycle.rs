@@ -145,9 +145,11 @@ pub fn inherit_parent_concepts<R: Rng + ?Sized>(
             member_node_ids: Vec::new(),
             strength: (parent_concept.strength * INHERITANCE_STRENGTH_FACTOR).clamp(0.05, 1.0),
         };
-        offspring
+        let mem_id = offspring
             .memory_graph
             .seed_inherited_concept(&parent.memory_graph, parent_concept, &inherited);
+        let mut inherited = inherited;
+        inherited.member_node_ids = offspring.memory_graph.concept_members_for(mem_id);
         offspring.concept_nodes.push(concept_id);
         offspring.concepts.push(inherited);
     }

@@ -54,6 +54,17 @@ impl RegulatoryState {
         }
     }
 
+    /// Low hydration increases fatigue, drains energy, and erodes integrity.
+    pub fn apply_dehydration_stress(&mut self) {
+        if self.hydration >= 0.25 {
+            return;
+        }
+        let deficit = 0.25 - self.hydration;
+        self.energy = (self.energy - deficit * 0.01).max(0.0);
+        self.integrity = (self.integrity - deficit * 0.003).max(0.0);
+        self.fatigue = (self.fatigue + deficit * 0.2).min(1.0);
+    }
+
     pub fn apply_reproduction_cost(&mut self, cost: f32) {
         self.energy = (self.energy - cost).max(0.0);
     }

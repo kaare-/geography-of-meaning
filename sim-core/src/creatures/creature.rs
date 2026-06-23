@@ -27,6 +27,14 @@ pub struct SleepUpdateResult {
     pub split_count: u32,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SleepTimingMs {
+    pub sleep_ms: f64,
+    pub imagination_ms: f64,
+    pub concept_creation_ms: f64,
+    pub concept_merge_ms: f64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SleepState {
     pub sleeping: bool,
@@ -99,10 +107,13 @@ impl Creature {
         &mut self,
         dream_noise: bool,
         rng: &mut R,
-    ) -> SleepUpdateResult {
+    ) -> (SleepUpdateResult, SleepTimingMs) {
+        let sleep_start = std::time::Instant::now();
         let mut result = SleepUpdateResult::default();
+        let mut timing = SleepTimingMs::default();
         if !self.sleep.sleeping {
-            return result;
+            timing.sleep_ms = sleep_start.elapsed().as_secs_f64() * 1000.0;
+            return (result, timing);
         }
         let at_sleep_start = self.sleep.ticks_remaining == SLEEP_DURATION_TICKS;
         if self.sleep.ticks_remaining > 0 {
@@ -113,17 +124,21 @@ impl Creature {
             if at_sleep_start {
                 // Sleep onset: no graph consolidation (deferred to wake).
             } else {
+                let imagination_start = std::time::Instant::now();
                 result.imagination_events = self.memory_graph.imagination_replay(
                     &self.concepts,
                     dream_noise,
                     rng,
                 );
+                timing.imagination_ms = imagination_start.elapsed().as_secs_f64() * 1000.0;
             }
             if self.sleep.ticks_remaining == 0 {
                 self.sleep.sleeping = false;
             }
-            return result;
+            timing.sleep_ms = sleep_start.elapsed().as_secs_f64() * 1000.0;
+            return (result, timing);
         }
+        let consolidation_start = std::time::Instant::now();
         let consolidation = self.memory_graph.consolidate_sleep(
             &self.recent_experience,
             &mut self.next_concept_id,
@@ -132,6 +147,8 @@ impl Creature {
         result.concepts_formed = consolidation.concepts.len() as u32;
         result.merge_count = consolidation.merge_count;
         result.split_count = consolidation.split_count;
+        timing.concept_merge_ms = consolidation_start.elapsed().as_secs_f64() * 1000.0;
+        let concept_creation_start = std::time::Instant::now();
         for concept in consolidation.concepts {
             if let Some(existing) = self.concepts.iter_mut().find(|c| c.id == concept.id) {
                 existing.prototype = concept.prototype;
@@ -146,10 +163,13 @@ impl Creature {
                 self.concepts.push(concept);
             }
         }
+        self.memory_graph.sync_concept_members(&mut self.concepts);
+        timing.concept_creation_ms = concept_creation_start.elapsed().as_secs_f64() * 1000.0;
         if at_wake {
             self.sleep.sleeping = false;
         }
-        result
+        timing.sleep_ms = sleep_start.elapsed().as_secs_f64() * 1000.0;
+        (result, timing)
     }
 
     pub fn try_early_wake(&mut self) {

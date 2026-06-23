@@ -97,11 +97,14 @@ impl World {
         self.active_sounds.len()
     }
 
-    pub fn tick_climate_and_water(&mut self) {
+    pub fn tick_climate_and_water(&mut self) -> (f64, f64) {
+        let climate_start = std::time::Instant::now();
         self.climate.tick();
         self.season = self.climate.season;
         self.day_phase = (self.time % TICKS_PER_DAY) as f32 / TICKS_PER_DAY as f32;
+        let climate_ms = climate_start.elapsed().as_secs_f64() * 1000.0;
 
+        let water_start = std::time::Instant::now();
         let humidity = self.climate.humidity;
         let climate = self.climate.clone();
         let active_set = self.active_chunks.clone();
@@ -133,6 +136,8 @@ impl World {
         self.rain_chunks_this_tick.clear();
         self.emit_environmental_sounds_after_climate();
         self.time += 1;
+        let water_ms = water_start.elapsed().as_secs_f64() * 1000.0;
+        (climate_ms, water_ms)
     }
 
     /// Horizontal `water_content` flow on active chunks every `GROUNDWATER_TICK_INTERVAL` ticks.
@@ -147,10 +152,14 @@ impl World {
             .for_each(|(_, chunk)| flow_groundwater(chunk));
     }
 
-    /// Slow geological tick: load propagation and collapse on active chunks.
-    pub fn tick_erosion(&mut self, nudge: f32) -> Vec<Vec3f> {
+      /// Slow geological tick: load propagation and collapse on active chunks.
+    /// Returns collapse positions and `(physics_ms, erosion_nudge_ms)`.
+    pub fn tick_erosion(&mut self, nudge: f32) -> (Vec<Vec3f>, f64, f64) {
         let active = self.active_chunks.clone();
+        let physics_start = std::time::Instant::now();
         let collapses = tick_load_physics(&mut self.chunks, &active);
+        let physics_ms = physics_start.elapsed().as_secs_f64() * 1000.0;
+        let erosion_start = std::time::Instant::now();
         self.chunks
             .par_iter_mut()
             .filter(|(coord, _)| active.contains(coord))
@@ -159,7 +168,8 @@ impl World {
                     *value = (*value + nudge).min(1.0);
                 }
             });
-        collapses
+        let erosion_ms = erosion_start.elapsed().as_secs_f64() * 1000.0;
+        (collapses, physics_ms, erosion_ms)
     }
 
     pub fn emit_environmental_sounds_after_climate(&mut self) {
