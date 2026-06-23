@@ -193,6 +193,14 @@ impl Simulation {
             creature.refresh_active_concepts();
             timing.concept_activation_ms += elapsed_ms(concept_start);
             let sleeping = creature.sleep.sleeping;
+            let spread = if sleeping {
+                None
+            } else {
+                Some(creature.memory_graph.spread_activation(
+                    &creature.active_concepts,
+                    &creature.concepts,
+                ))
+            };
             let comm_start = std::time::Instant::now();
             let heard_signature = dominant_heard_signature(creature, &self.world);
             let heard_call_frequency =
@@ -207,6 +215,7 @@ impl Simulation {
                 heard_call_frequency,
                 Some(&mut timing.prediction_ms),
                 &creatures_for_social,
+                spread.as_ref(),
             ));
             timing.action_selection_ms += elapsed_ms(action_start);
         }

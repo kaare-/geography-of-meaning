@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::math::Vec3i;
+use crate::memory::NodeId;
 use crate::world::{
     age_adjusted_vocal_profile, emit_incidental_sound, sample_material_acoustics,
     signature_with_age_band, ActionSoundKind, SoundEvent, World,
@@ -79,6 +82,7 @@ pub fn choose_action<R: Rng + ?Sized>(
     heard_call_frequency: Option<f32>,
     prediction_ms: Option<&mut f64>,
     others: &[Creature],
+    spread: Option<&HashMap<NodeId, f32>>,
 ) -> Action {
     let push_dir = Vec3i::new(
         rng.gen_range(-1..=1),
@@ -233,14 +237,20 @@ pub fn choose_action<R: Rng + ?Sized>(
     }
 
     if !sleeping {
-        let spread = creature.memory_graph.spread_activation(
-            &creature.active_concepts,
-            &creature.concepts,
-        );
-        let uncertainty = creature.memory_graph.prediction_uncertainty_with_spread(
-            creature.sensor,
-            &spread,
-        );
+        let spread_owned;
+        let spread_map = match spread {
+            Some(s) => s,
+            None => {
+                spread_owned = creature.memory_graph.spread_activation(
+                    &creature.active_concepts,
+                    &creature.concepts,
+                );
+                &spread_owned
+            }
+        };
+        let uncertainty = creature
+            .memory_graph
+            .prediction_uncertainty_with_spread(creature.sensor, spread_map);
         let novelty = creature.memory_graph.novelty_score(creature.sensor);
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Move(_))) {
             weights[i].1 += novelty * 1.5;
@@ -255,10 +265,9 @@ pub fn choose_action<R: Rng + ?Sized>(
 
         if rng.gen::<f32>() >= effective_exploration_rate(uncertainty) {
             let prediction_start = std::time::Instant::now();
-            let predictions = creature.memory_graph.predict_action_outcomes_with_spread(
-                creature.sensor,
-                &spread,
-            );
+            let predictions = creature
+                .memory_graph
+                .predict_action_outcomes_with_spread(creature.sensor, spread_map);
             if let Some(ms) = prediction_ms {
                 *ms += prediction_start.elapsed().as_secs_f64() * 1000.0;
             }

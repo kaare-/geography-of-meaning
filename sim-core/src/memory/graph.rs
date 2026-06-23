@@ -28,6 +28,8 @@ const EDGE_PRUNE_STRENGTH_THRESHOLD: f32 = 0.015;
 const MIN_EDGE_OBSERVATIONS_TO_KEEP: u32 = 2;
 const DELAY_WEIGHT_SCALE: f32 = 0.1;
 const OUTCOME_QUANTUM: f32 = 0.05;
+const SOUND_INTENSITY_EMA: f32 = 0.25;
+const MAX_SOUND_SIGNATURES: usize = 48;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum CanonicalActionKey {
@@ -86,6 +88,7 @@ pub struct MemoryGraph {
     edges_by_source: HashMap<NodeId, Vec<usize>>,
     action_nodes: HashMap<CanonicalActionKey, NodeId>,
     outcome_nodes: HashMap<i32, NodeId>,
+    sound_nodes: HashMap<u64, NodeId>,
 }
 
 impl MemoryGraph {
@@ -95,6 +98,11 @@ impl MemoryGraph {
 
     fn node_by_id(&self, id: NodeId) -> Option<&MemoryNode> {
         self.node_index.get(&id).map(|&i| &self.nodes[i])
+    }
+
+    fn node_by_id_mut(&mut self, id: NodeId) -> Option<&mut MemoryNode> {
+        let idx = *self.node_index.get(&id)?;
+        Some(&mut self.nodes[idx])
     }
 
     fn push_edge(&mut self, edge: MemoryEdge) {
@@ -141,10 +149,7 @@ impl MemoryGraph {
             return;
         }
         let sensory_id = self.find_or_create_sensory(sensory);
-        let sound_id = self.create_node(NodeKind::Sound(SoundNode {
-            intensity,
-            signature,
-        }));
+        let sound_id = self.find_or_create_sound(signature, intensity);
         self.add_or_strengthen_edge(sound_id, sensory_id, EdgeType::SoundActivates);
         self.add_or_strengthen_edge(sensory_id, sound_id, EdgeType::CoOccurs);
     }
@@ -152,11 +157,11 @@ impl MemoryGraph {
     /// Signatures with positive mean sound→outcome association above confidence threshold.
     pub fn trusted_signature_count(&self) -> usize {
         let mut by_sig: HashMap<u64, (f32, f32)> = HashMap::new();
-        for node in &self.nodes {
-            let NodeKind::Sound(sound) = node.kind else {
+        for &sound_id in self.sound_nodes.values() {
+            let Some(NodeKind::Sound(sound)) = self.node_by_id(sound_id).map(|n| n.kind) else {
                 continue;
             };
-            let (outcome, weight) = self.sound_node_outcome_stats(node.id);
+            let (outcome, weight) = self.sound_node_outcome_stats(sound_id);
             if weight < 1e-6 {
                 continue;
             }
@@ -261,6 +266,7 @@ impl MemoryGraph {
             }
         }
         self.prune_weak_edges();
+        self.prune_excess_sound_signatures();
         let mut concepts = self.cluster_sensory_concepts(next_concept_id, existing_concepts);
         concepts.extend(self.merge_loose_sensory_into_concepts(next_concept_id, existing_concepts));
         let merge_count = self.merge_similar_concept_nodes(&mut concepts);
@@ -737,11 +743,11 @@ impl MemoryGraph {
             }
         }
 
-        for node in &self.nodes {
-            let NodeKind::Sound(sound) = node.kind else {
+        for &sound_id in self.sound_nodes.values() {
+            let Some(NodeKind::Sound(sound)) = self.node_by_id(sound_id).map(|n| n.kind) else {
                 continue;
             };
-            for &ei in self.outgoing_edges(node.id) {
+            for &ei in self.outgoing_edges(sound_id) {
                 let edge = &self.edges[ei];
                 if edge.edge_type != EdgeType::SoundActivates {
                     continue;
@@ -822,21 +828,12 @@ impl MemoryGraph {
     }
 
     fn signature_mean_outcome(&self, signature: u64) -> f32 {
-        let mut total = 0.0f32;
-        let mut weight_sum = 0.0f32;
-        for node in &self.nodes {
-            let NodeKind::Sound(sound) = node.kind else {
-                continue;
-            };
-            if sound.signature != signature {
-                continue;
-            }
-            let (outcome, w) = self.sound_node_outcome_stats(node.id);
-            total += outcome * w;
-            weight_sum += w;
-        }
+        let Some(&sound_id) = self.sound_nodes.get(&signature) else {
+            return 0.0;
+        };
+        let (outcome, weight_sum) = self.sound_node_outcome_stats(sound_id);
         if weight_sum > 1e-6 {
-            total / weight_sum
+            outcome
         } else {
             0.0
         }
@@ -902,6 +899,50 @@ impl MemoryGraph {
         let id = self.create_node(NodeKind::Outcome(quantized));
         self.outcome_nodes.insert(key, id);
         id
+    }
+
+    fn find_or_create_sound(&mut self, signature: u64, intensity: f32) -> NodeId {
+        if let Some(&id) = self.sound_nodes.get(&signature) {
+            if let Some(node) = self.node_by_id_mut(id) {
+                if let NodeKind::Sound(ref mut sound) = node.kind {
+                    sound.intensity = sound.intensity * (1.0 - SOUND_INTENSITY_EMA)
+                        + intensity * SOUND_INTENSITY_EMA;
+                }
+            }
+            return id;
+        }
+        let id = self.create_node(NodeKind::Sound(SoundNode {
+            intensity,
+            signature,
+        }));
+        self.sound_nodes.insert(signature, id);
+        id
+    }
+
+    fn sound_node_strength_score(&self, sound_id: NodeId) -> f32 {
+        self.outgoing_edges(sound_id)
+            .iter()
+            .map(|&ei| self.edges[ei].strength * self.edges[ei].confidence)
+            .sum()
+    }
+
+    /// Drop weakest sound signatures when the index grows too large (sleep hygiene).
+    fn prune_excess_sound_signatures(&mut self) {
+        if self.sound_nodes.len() <= MAX_SOUND_SIGNATURES {
+            return;
+        }
+        let mut scored: Vec<(f32, u64)> = self
+            .sound_nodes
+            .iter()
+            .map(|(&signature, &id)| (self.sound_node_strength_score(id), signature))
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let keep: HashSet<u64> = scored
+            .into_iter()
+            .take(MAX_SOUND_SIGNATURES)
+            .map(|(_, signature)| signature)
+            .collect();
+        self.sound_nodes.retain(|signature, _| keep.contains(signature));
     }
 
     fn create_node(&mut self, kind: NodeKind) -> NodeId {
@@ -1507,6 +1548,30 @@ mod tests {
         graph.record_experience(&exp);
         let preds = graph.predict_action_outcomes(SensorState::default(), &[], &[]);
         assert!(preds.rest_delta >= 0.0);
+    }
+
+    #[test]
+    fn canonical_sound_nodes_deduplicate_by_signature() {
+        let mut graph = MemoryGraph::new();
+        let sensory = SensorState::default();
+        for i in 0..100 {
+            graph.record_heard_sound(sensory, 0.1 + (i as f32) * 0.001, 42);
+        }
+        let summary = graph.node_summary();
+        assert_eq!(summary.sound, 1, "same signature should share one sound node");
+        assert_eq!(graph.sound_nodes.len(), 1);
+    }
+
+    #[test]
+    fn prune_excess_sound_signatures_caps_index() {
+        let mut graph = MemoryGraph::new();
+        let sensory = SensorState::default();
+        for sig in 0..80u64 {
+            graph.record_heard_sound(sensory, 0.2, sig);
+        }
+        assert_eq!(graph.sound_nodes.len(), 80);
+        let _ = graph.consolidate_sleep(&[], &mut 1, &[]);
+        assert!(graph.sound_nodes.len() <= MAX_SOUND_SIGNATURES);
     }
 
     #[test]
