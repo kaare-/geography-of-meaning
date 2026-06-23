@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rand::Rng;
 
@@ -18,10 +18,14 @@ const MIN_CONCEPT_CLUSTER_SIZE: usize = 2;
 const SPREAD_DECAY: f32 = 0.5;
 const SPREAD_DECAY_HOP2: f32 = 0.25;
 const CO_OCCURS_SPREAD_WEIGHT: f32 = 0.35;
-const CONCEPT_MERGE_THRESHOLD: f32 = 0.88;
-const CONCEPT_SPLIT_VARIANCE_THRESHOLD: f32 = 0.12;
+const CONCEPT_MERGE_THRESHOLD: f32 = 0.84;
+const CONCEPT_SPLIT_VARIANCE_THRESHOLD: f32 = 0.20;
+const MIN_CONCEPT_SPLIT_MEMBERS: usize = 6;
 const PROTOTYPE_EMA_ALPHA: f32 = 0.15;
 const IMAGINATION_SPREAD_STRENGTHEN: f32 = 0.02;
+const IMAGINATION_EDGE_BUDGET: usize = 1500;
+const EDGE_PRUNE_STRENGTH_THRESHOLD: f32 = 0.015;
+const MIN_EDGE_OBSERVATIONS_TO_KEEP: u32 = 2;
 const DELAY_WEIGHT_SCALE: f32 = 0.1;
 const OUTCOME_QUANTUM: f32 = 0.05;
 
@@ -230,28 +234,33 @@ impl MemoryGraph {
             let Some(sensory_id) = self.find_similar_sensory(exp.sensory_before, 0.75) else {
                 continue;
             };
-            for edge in &mut self.edges {
-                if edge.source_id == sensory_id && edge.edge_type == EdgeType::Precedes {
-                    if let Some(target) = self.nodes.iter().find(|n| n.id == edge.target_id) {
-                        if let NodeKind::Action(action) = target.kind {
-                            if action_matches(action, exp.action) {
-                                if exp.outcome > 0.0 {
-                                    edge.strength = (edge.strength + 0.05).min(1.0);
-                                    edge.confidence = (edge.confidence + 0.03).min(1.0);
-                                } else if exp.outcome < 0.0 {
-                                    edge.strength = (edge.strength - 0.04).max(0.0);
-                                }
-                            }
-                        }
-                    }
+            for ei in self.outgoing_edges(sensory_id).to_vec() {
+                if self.edges[ei].edge_type != EdgeType::Precedes {
+                    continue;
+                }
+                let target_id = self.edges[ei].target_id;
+                let action_match = self
+                    .node_by_id(target_id)
+                    .map(|n| matches!(n.kind, NodeKind::Action(a) if action_matches(a, exp.action)))
+                    .unwrap_or(false);
+                if !action_match {
+                    continue;
+                }
+                let edge = &mut self.edges[ei];
+                if exp.outcome > 0.0 {
+                    edge.strength = (edge.strength + 0.05).min(1.0);
+                    edge.confidence = (edge.confidence + 0.03).min(1.0);
+                } else if exp.outcome < 0.0 {
+                    edge.strength = (edge.strength - 0.04).max(0.0);
                 }
             }
         }
         for edge in &mut self.edges {
-            if edge.observations < 2 {
+            if edge.observations < MIN_EDGE_OBSERVATIONS_TO_KEEP {
                 edge.strength = (edge.strength - 0.02).max(0.0);
             }
         }
+        self.prune_weak_edges();
         let mut concepts = self.cluster_sensory_concepts(next_concept_id, existing_concepts);
         concepts.extend(self.merge_loose_sensory_into_concepts(next_concept_id, existing_concepts));
         let merge_count = self.merge_similar_concept_nodes(&mut concepts);
@@ -273,12 +282,16 @@ impl MemoryGraph {
         if self.nodes.is_empty() {
             return 0;
         }
-        let active = if !concepts.is_empty() && rng.gen::<f32>() < 0.7 {
+        let events = if !concepts.is_empty() && rng.gen::<f32>() < 0.7 {
             let concept = &concepts[rng.gen_range(0..concepts.len())];
-            vec![ActiveConcept {
+            let active = vec![ActiveConcept {
                 concept_id: concept.id,
                 activation: 0.55,
-            }]
+            }];
+            let spread = self.spread_activation(&active, concepts);
+            let sources: Vec<NodeId> = spread.keys().copied().collect();
+            let candidates = self.collect_outgoing_edge_indices(sources.into_iter());
+            self.strengthen_budgeted_edges(candidates, IMAGINATION_EDGE_BUDGET)
         } else {
             let sensory_nodes: Vec<NodeId> = self
                 .nodes
@@ -294,31 +307,79 @@ impl MemoryGraph {
             let id = sensory_nodes[rng.gen_range(0..sensory_nodes.len())];
             let mut activation = HashMap::new();
             activation.insert(id, 0.5);
-            let hop1 = Self::spread_hop(&self.edges, &self.edges_by_source, &activation, SPREAD_DECAY);
-            let mut events = 0u32;
-            for edge in &mut self.edges {
-                if hop1.contains_key(&edge.source_id) {
-                    edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
-                    events += 1;
-                }
-            }
-            if dream_noise {
-                self.apply_dream_noise(rng);
-            }
-            return events;
+            let hop1 = Self::spread_hop(
+                &self.edges,
+                &self.edges_by_source,
+                &activation,
+                SPREAD_DECAY,
+            );
+            let mut sources: HashSet<NodeId> = activation.keys().copied().collect();
+            sources.extend(hop1.keys().copied());
+            let candidates = self.collect_outgoing_edge_indices(sources.into_iter());
+            self.strengthen_budgeted_edges(candidates, IMAGINATION_EDGE_BUDGET)
         };
-        let spread = self.spread_activation(&active, concepts);
-        let mut events = 0u32;
-        for edge in &mut self.edges {
-            if spread.contains_key(&edge.source_id) {
-                edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
-                events += 1;
-            }
-        }
         if dream_noise {
             self.apply_dream_noise(rng);
         }
         events
+    }
+
+    fn collect_outgoing_edge_indices(
+        &self,
+        sources: impl Iterator<Item = NodeId>,
+    ) -> Vec<usize> {
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        for source_id in sources {
+            for &ei in self.outgoing_edges(source_id) {
+                if seen.insert(ei) {
+                    out.push(ei);
+                }
+            }
+        }
+        out
+    }
+
+    fn strengthen_budgeted_edges(&mut self, candidate_indices: Vec<usize>, budget: usize) -> u32 {
+        if candidate_indices.is_empty() {
+            return 0;
+        }
+        let mut scored: Vec<(f32, usize)> = candidate_indices
+            .into_iter()
+            .map(|ei| {
+                let e = &self.edges[ei];
+                (e.strength * e.confidence, ei)
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let mut events = 0u32;
+        for (_, ei) in scored.into_iter().take(budget) {
+            let edge = &mut self.edges[ei];
+            edge.strength = (edge.strength + IMAGINATION_SPREAD_STRENGTHEN).min(1.0);
+            events += 1;
+        }
+        events
+    }
+
+    fn prune_weak_edges(&mut self) {
+        let before = self.edges.len();
+        self.edges.retain(|e| {
+            e.strength >= EDGE_PRUNE_STRENGTH_THRESHOLD
+                || e.observations >= MIN_EDGE_OBSERVATIONS_TO_KEEP
+        });
+        if self.edges.len() != before {
+            self.rebuild_edge_index();
+        }
+    }
+
+    fn rebuild_edge_index(&mut self) {
+        self.edges_by_source.clear();
+        for (idx, edge) in self.edges.iter().enumerate() {
+            self.edges_by_source
+                .entry(edge.source_id)
+                .or_default()
+                .push(idx);
+        }
     }
 
     fn apply_dream_noise<R: Rng + ?Sized>(&mut self, rng: &mut R) {
@@ -1090,7 +1151,7 @@ impl MemoryGraph {
         let mut split_count = 0u32;
         let mut new_splits = Vec::new();
         for concept in concepts.iter_mut() {
-            if concept.member_node_ids.len() < 4 {
+            if concept.member_node_ids.len() < MIN_CONCEPT_SPLIT_MEMBERS {
                 continue;
             }
             let mut outliers = Vec::new();
@@ -1297,6 +1358,58 @@ mod tests {
             outcome,
             timestamp: 1,
         }
+    }
+
+    #[test]
+    fn imagination_replay_respects_edge_budget() {
+        let mut graph = MemoryGraph::new();
+        let sensory = graph.create_node(NodeKind::SensoryPattern(SensorState::default()));
+        let action = graph.create_node(NodeKind::Action(Action::Rest));
+        for i in 0..2000 {
+            graph.push_edge(MemoryEdge {
+                source_id: sensory,
+                target_id: action,
+                edge_type: EdgeType::Precedes,
+                strength: 0.1 + (i as f32 * 0.0001),
+                confidence: 0.5,
+                observations: 3,
+                delay_mean: 1.0,
+                delay_variance: 0.2,
+            });
+        }
+        let mut rng = rand::thread_rng();
+        let events = graph.imagination_replay(&[], false, &mut rng);
+        assert!(events <= IMAGINATION_EDGE_BUDGET as u32);
+        assert!(events > 0);
+    }
+
+    #[test]
+    fn consolidate_sleep_prunes_weak_edges() {
+        let mut graph = MemoryGraph::new();
+        let exp = sample_experience(0.2);
+        graph.record_experience(&exp);
+        let sensory = graph
+            .nodes
+            .iter()
+            .find_map(|n| match n.kind {
+                NodeKind::SensoryPattern(_) => Some(n.id),
+                _ => None,
+            })
+            .expect("sensory node");
+        let weak_target = graph.create_node(NodeKind::Action(Action::Dig));
+        graph.push_edge(MemoryEdge {
+            source_id: sensory,
+            target_id: weak_target,
+            edge_type: EdgeType::Precedes,
+            strength: 0.005,
+            confidence: 0.01,
+            observations: 1,
+            delay_mean: 1.0,
+            delay_variance: 0.5,
+        });
+        let before = graph.edges.len();
+        let _ = graph.consolidate_sleep(&[exp], &mut 1, &[]);
+        assert!(graph.edges.len() < before);
     }
 
     #[test]
