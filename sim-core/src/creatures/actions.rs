@@ -22,6 +22,7 @@ pub enum Action {
     Drop,
     PlaceMaterial,
     ApplyBinder,
+    TransferOrganic,
 }
 
 impl Action {
@@ -38,6 +39,7 @@ impl Action {
             Action::Drop => "drop",
             Action::PlaceMaterial => "place_material",
             Action::ApplyBinder => "apply_binder",
+            Action::TransferOrganic => "transfer_organic",
         }
     }
 }
@@ -59,6 +61,7 @@ const PLACE_MATERIAL_FATIGUE_COST: f32 = 0.1;
 const APPLY_BINDER_ENERGY_COST: f32 = 0.06;
 const APPLY_BINDER_FATIGUE_COST: f32 = 0.12;
 const BINDER_ORGANIC_COST: f32 = 0.04;
+const TRANSFER_ORGANIC_BASE_WEIGHT: f32 = 0.12;
 
 pub fn choose_action<R: Rng + ?Sized>(
     creature: &Creature,
@@ -88,6 +91,7 @@ pub fn choose_action<R: Rng + ?Sized>(
             (Action::Drop, 0.4),
             (Action::PlaceMaterial, 0.15),
             (Action::ApplyBinder, 0.1),
+            (Action::TransferOrganic, 0.08),
         ]
     } else {
         vec![
@@ -102,6 +106,7 @@ pub fn choose_action<R: Rng + ?Sized>(
             (Action::Drop, 0.4),
             (Action::PlaceMaterial, 0.35),
             (Action::ApplyBinder, 0.3),
+            (Action::TransferOrganic, TRANSFER_ORGANIC_BASE_WEIGHT),
         ]
     };
 
@@ -177,6 +182,12 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature.sensor.chemical_binder + 0.3;
         }
     }
+    if creature.regulatory.carried_mass > 0.2 && creature.sensor.chemical_creature > 0.05 {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::TransferOrganic)) {
+            weights[i].1 += creature.regulatory.carried_mass
+                + creature.sensor.chemical_creature * 0.8;
+        }
+    }
 
     if !sleeping && rng.gen::<f32>() >= EXPLORATION_RATE {
         let predictions = creature.memory_graph.predict_action_outcomes(
@@ -197,6 +208,7 @@ pub fn choose_action<R: Rng + ?Sized>(
                 Action::Drop => predictions.drop_delta,
                 Action::PlaceMaterial => predictions.place_material_delta,
                 Action::ApplyBinder => predictions.apply_binder_delta,
+                Action::TransferOrganic => predictions.transfer_organic_delta,
             };
             if predicted > 0.0 {
                 *weight += predicted * PREDICTION_WEIGHT;
@@ -234,7 +246,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
     };
 
     match action {
-        Action::Move(_) | Action::Push(_) | Action::Follow => false,
+        Action::Move(_) | Action::Push(_) | Action::Follow | Action::TransferOrganic => false,
         Action::ConsumeOrganic => {
             let pos = creature.position.floor_i();
             let wet_trace = creature.sensor.chemical_wet_mineral;

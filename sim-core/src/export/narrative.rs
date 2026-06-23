@@ -28,6 +28,7 @@ pub struct NarrativeSummary {
     pub total_deaths: usize,
     pub total_digs: u32,
     pub total_concepts_formed: u32,
+    pub population_concept_count: usize,
     pub concept_spike_count: usize,
 }
 
@@ -112,12 +113,18 @@ pub fn extract_narrative(tick_logs: &[TickLogEntry]) -> NarrativeSummary {
         }
     }
 
+    let population_concept_count: usize = tick_logs
+        .last()
+        .map(|e| e.creatures.iter().map(|c| c.concept_count).sum())
+        .unwrap_or(0);
+
     NarrativeSummary {
         events,
         total_births,
         total_deaths,
         total_digs,
         total_concepts_formed,
+        population_concept_count,
         concept_spike_count,
     }
 }

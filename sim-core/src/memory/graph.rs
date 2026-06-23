@@ -10,7 +10,7 @@ use super::edges::{EdgeType, MemoryEdge};
 use super::nodes::{MemoryNode, NodeId, NodeKind, SoundNode};
 
 const SIMILARITY_THRESHOLD: f32 = 0.85;
-const CONCEPT_CLUSTER_THRESHOLD: f32 = 0.75;
+const CONCEPT_CLUSTER_THRESHOLD: f32 = 0.70;
 const MIN_CONCEPT_CLUSTER_SIZE: usize = 2;
 const SPREAD_DECAY: f32 = 0.5;
 
@@ -27,6 +27,7 @@ pub struct ActionPredictions {
     pub drop_delta: f32,
     pub place_material_delta: f32,
     pub apply_binder_delta: f32,
+    pub transfer_organic_delta: f32,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
@@ -626,6 +627,7 @@ fn accumulate_action_prediction(predictions: &mut ActionPredictions, action: Act
         Action::Drop => predictions.drop_delta += delta,
         Action::PlaceMaterial => predictions.place_material_delta += delta,
         Action::ApplyBinder => predictions.apply_binder_delta += delta,
+        Action::TransferOrganic => predictions.transfer_organic_delta += delta,
     }
 }
 
@@ -654,6 +656,7 @@ fn action_matches(a: Action, b: Action) -> bool {
         (Action::Drop, Action::Drop) => true,
         (Action::PlaceMaterial, Action::PlaceMaterial) => true,
         (Action::ApplyBinder, Action::ApplyBinder) => true,
+        (Action::TransferOrganic, Action::TransferOrganic) => true,
         _ => false,
     }
 }

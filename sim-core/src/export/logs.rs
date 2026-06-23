@@ -45,6 +45,7 @@ pub struct ActionCounts {
     pub drop_count: u32,
     pub place_material_count: u32,
     pub apply_binder_count: u32,
+    pub transfer_organic_count: u32,
 }
 
 #[derive(Debug, Serialize)]

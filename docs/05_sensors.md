@@ -179,8 +179,8 @@ The soundscape mixes natural and organism-generated traces:
 
 | Source | Channel bias | Status |
 |--------|--------------|--------|
-| Water flow, rain | `sound_ambient` | Partial (ambient floor from active sounds) |
-| Collapse / erosion | `sound_ambient` | Planned |
+| Water flow, rain | `sound_ambient` | Implemented (`emit_environmental_sound`) |
+| Collapse / erosion | `sound_ambient` | Implemented (collapse in `physics.rs` → ambient) |
 | Movement, digging, feeding | `sound_ambient` | Implemented (incidental `SoundEvent`s) |
 | Construction (place, binder) | `sound_ambient` | Partial (place emits; binder planned) |
 | Intentional calls | `sound_calls` | Partial (`EmitSound` → `SoundEvent`) |
@@ -209,6 +209,8 @@ These are **memory edges** (`SoundActivates`, `precedes`, `action_leads_to`) —
 | Morphology sound coupling | `world/sound.rs` | Mass, speed, carried_mass scale amplitude/rhythm |
 | Age-scaled signatures | `world/sound.rs` | `signature_with_age_band`, `age_adjusted_vocal_profile` |
 | `Morphology` | `creatures/morphology.rs` | Implemented; coupled via emitter context |
+| `emit_environmental_sound` | `world/sound.rs`, `world/mod.rs`, `engine.rs` | Rain, water-flow, collapse — `intentional: false`, low amplitude |
+| `apply_ambient_processing_cost` | `regulation.rs`, `engine.rs` | Minimal energy drain when `sound_ambient` > 0.25 |
 
 ### Cross-references (sound addendum)
 

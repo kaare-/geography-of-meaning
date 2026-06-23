@@ -11,7 +11,8 @@ pub use actions::{apply_action, choose_action, Action};
 pub use morphology::Morphology;
 pub use spatial::{
     compute_follow_direction, push_strength, resolve_position_overlaps, try_creature_move_at,
-    try_creature_push_at, PushEvent, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST,
+    try_creature_push_at, try_transfer_organic_at, PushEvent, FOLLOW_ENERGY_COST,
+    FOLLOW_FATIGUE_COST, TRANSFER_ORGANIC_ENERGY_COST, TRANSFER_ORGANIC_HYDRATION_COST,
 };
 pub use creature::{Creature, Experience, MAX_RECENT_EXPERIENCE, SleepState};
 pub use genome::Genome;

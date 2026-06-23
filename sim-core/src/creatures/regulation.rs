@@ -58,6 +58,13 @@ impl RegulatoryState {
         self.energy = (self.energy - cost).max(0.0);
     }
 
+    pub fn apply_ambient_processing_cost(&mut self, sound_ambient: f32) {
+        if sound_ambient > 0.25 {
+            let excess = sound_ambient - 0.25;
+            self.energy = (self.energy - excess * 0.0012).max(0.0);
+        }
+    }
+
     pub fn apply_action_cost(&mut self, energy_cost: f32, fatigue_cost: f32) {
         self.energy = (self.energy - energy_cost).max(0.0);
         self.fatigue = (self.fatigue + fatigue_cost).min(1.0);

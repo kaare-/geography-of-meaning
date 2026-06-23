@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::math::{Vec3f, Vec3i};
 use crate::world::physics::apply_trail_wear;
 use crate::world::{
@@ -64,6 +66,13 @@ fn find_displacement_slot(
 
 pub const FOLLOW_ENERGY_COST: f32 = 0.04;
 pub const FOLLOW_FATIGUE_COST: f32 = 0.09;
+
+pub const TRANSFER_ORGANIC_ENERGY_COST: f32 = 0.05;
+pub const TRANSFER_ORGANIC_HYDRATION_COST: f32 = 0.03;
+pub const TRANSFER_ORGANIC_FATIGUE_COST: f32 = 0.06;
+const TRANSFER_ORGANIC_AMOUNT: f32 = 0.04;
+const TRANSFER_ACTOR_CARRIED_MIN: f32 = 0.18;
+const TRANSFER_NEIGHBOR_ENERGY_MAX: f32 = 0.38;
 
 /// Step direction toward the adjacent neighbor with strongest creature-trace gradient.
 pub fn compute_follow_direction(creature: &Creature, others: &[Creature]) -> Option<Vec3i> {
@@ -132,6 +141,60 @@ pub fn try_creature_move_at(
         0.08,
         material,
     );
+    true
+}
+
+/// Move carried organic to an adjacent low-energy neighbor (proximity + regulatory state).
+pub fn try_transfer_organic_at<R: Rng + ?Sized>(
+    creatures: &mut [Creature],
+    actor_idx: usize,
+    rng: &mut R,
+) -> bool {
+    let actor_carried = creatures[actor_idx].regulatory.carried_mass;
+    if actor_carried < TRANSFER_ACTOR_CARRIED_MIN {
+        return false;
+    }
+    let center = creatures[actor_idx].position.floor_i();
+    let actor_id = creatures[actor_idx].id;
+
+    let mut candidates = Vec::new();
+    for (j, other) in creatures.iter().enumerate() {
+        if j == actor_idx || other.id == actor_id {
+            continue;
+        }
+        if other.regulatory.energy > TRANSFER_NEIGHBOR_ENERGY_MAX {
+            continue;
+        }
+        let other_pos = other.position.floor_i();
+        let dx = (other_pos.x - center.x).abs();
+        let dy = (other_pos.y - center.y).abs();
+        let dz = (other_pos.z - center.z).abs();
+        if dx <= 1 && dy <= 1 && dz <= 1 && (dx != 0 || dy != 0 || dz != 0) {
+            candidates.push(j);
+        }
+    }
+    if candidates.is_empty() {
+        return false;
+    }
+    let target_idx = candidates[rng.gen_range(0..candidates.len())];
+    let transfer = TRANSFER_ORGANIC_AMOUNT.min(actor_carried * 0.25);
+
+    let (actor, target) = if actor_idx < target_idx {
+        let (left, right) = creatures.split_at_mut(target_idx);
+        (&mut left[actor_idx], &mut right[0])
+    } else {
+        let (left, right) = creatures.split_at_mut(actor_idx);
+        (&mut right[0], &mut left[target_idx])
+    };
+
+    actor.regulatory.carried_mass -= transfer;
+    actor.regulatory.apply_action_cost(
+        TRANSFER_ORGANIC_ENERGY_COST,
+        TRANSFER_ORGANIC_FATIGUE_COST,
+    );
+    actor.regulatory.hydration =
+        (actor.regulatory.hydration - TRANSFER_ORGANIC_HYDRATION_COST).max(0.0);
+    target.regulatory.energy = (target.regulatory.energy + transfer * 2.2).min(1.0);
     true
 }
 

@@ -4,6 +4,13 @@ use crate::creatures::genome::VocalProfile;
 use crate::math::{Vec3f, Vec3i};
 use crate::world::World;
 
+#[derive(Debug, Clone, Copy)]
+pub enum EnvironmentalSoundKind {
+    Rain,
+    Collapse,
+    WaterFlow,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ActionSoundKind {
     Move,
@@ -190,7 +197,7 @@ pub fn emit_incidental_sound(
 ) {
     let mass_amp = (0.4 + emitter.mass * 0.25 + emitter.carried_mass * 0.35).clamp(0.3, 2.0);
     let rhythm = (action_rhythm_base(action_kind) * emitter.move_speed * 0.85).clamp(0.15, 1.2);
-    let amplitude = (amplitude_base * material.amplitude_scale * mass_amp).clamp(0.02, 0.25);
+    let amplitude = (amplitude_base * material.amplitude_scale * mass_amp).clamp(0.02, 0.18);
     let duration = action_duration(action_kind);
     let signature = signature_with_age_band(emitter.signature, emitter.age);
     let profile = [material.frequency_profile, duration as f32, amplitude, rhythm];
@@ -201,6 +208,34 @@ pub fn emit_incidental_sound(
         signature,
         amplitude,
         frequency_profile: material.frequency_profile,
+        duration,
+        rhythm,
+        signal_family_id: signal_family_id(&profile),
+        age: 0,
+        intentional: false,
+    });
+}
+
+/// Weak ambient trace from rain, collapse, or water — not creature-emitted.
+pub fn emit_environmental_sound(
+    world: &mut World,
+    position: Vec3f,
+    kind: EnvironmentalSoundKind,
+    intensity: f32,
+) {
+    let (frequency_profile, duration, rhythm, amp_scale) = match kind {
+        EnvironmentalSoundKind::Rain => (0.22, 10, 0.18, 0.035),
+        EnvironmentalSoundKind::Collapse => (0.58, 8, 0.4, 0.05),
+        EnvironmentalSoundKind::WaterFlow => (0.32, 14, 0.28, 0.04),
+    };
+    let amplitude = (intensity * amp_scale).clamp(0.01, 0.1);
+    let profile = [frequency_profile, duration as f32, amplitude, rhythm];
+    world.emit_sound(SoundEvent {
+        position,
+        emitter_id: 0,
+        signature: 0,
+        amplitude,
+        frequency_profile,
         duration,
         rhythm,
         signal_family_id: signal_family_id(&profile),

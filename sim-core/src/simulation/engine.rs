@@ -4,10 +4,11 @@ use rand::{Rng, SeedableRng};
 use crate::creatures::{
     apply_action, choose_action, compute_follow_direction, deposit_creature_organic,
     dominant_heard_signature, dominant_heard_call, read_sensors_with_noise, resolve_position_overlaps,
-    try_creature_move_at, try_creature_push_at, try_reproduce, Action, Creature, DeathEvent,
-    Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, Genome, Morphology,
+    try_creature_move_at, try_creature_push_at, try_transfer_organic_at, try_reproduce, Action,
+    Creature, DeathEvent, Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, Genome, Morphology,
     REPRODUCTION_ENERGY_COST,
 };
+use crate::world::{emit_environmental_sound, EnvironmentalSoundKind};
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
 use crate::world::World;
@@ -92,7 +93,15 @@ impl Simulation {
         if self.config.erosion_tick_interval > 0
             && self.world.time % self.config.erosion_tick_interval == 0
         {
-            self.world.tick_erosion(EROSION_DAMAGE_NUDGE);
+            let collapses = self.world.tick_erosion(EROSION_DAMAGE_NUDGE);
+            for pos in collapses {
+                emit_environmental_sound(
+                    &mut self.world,
+                    pos,
+                    EnvironmentalSoundKind::Collapse,
+                    0.7,
+                );
+            }
         }
 
         self.world.tick_sounds();
@@ -191,6 +200,12 @@ impl Simulation {
                         }
                     }
                 }
+                Action::TransferOrganic => {
+                    if try_transfer_organic_at(&mut self.creatures, idx, &mut self.rng) {
+                        creature.regulatory = self.creatures[idx].regulatory;
+                        action_counts.transfer_organic_count += 1;
+                    }
+                }
                 _ => {
                     let _ = apply_action(&mut creature, action, &mut self.world);
                     self.creatures[idx].regulatory = creature.regulatory;
@@ -207,6 +222,9 @@ impl Simulation {
             }
 
             creature.regulatory.apply_passive_hydration(&creature.sensor);
+            creature
+                .regulatory
+                .apply_ambient_processing_cost(creature.sensor.sound_ambient);
 
             let noise_mult = if sleeping { 0.25 } else { 1.0 };
             creature.sensor = read_sensors_with_noise(
@@ -347,7 +365,7 @@ fn random_spawn_genome<R: Rng + ?Sized>(rng: &mut R) -> Genome {
     genome.heat_retention = rng.gen_range(0.2..0.9);
     genome.carry_bias = rng.gen_range(0.5..1.6);
     genome.reserve_bias = rng.gen_range(0.3..0.9);
-    genome.metabolism_rate = rng.gen_range(0.005..0.014);
+    genome.metabolism_rate = rng.gen_range(0.005..0.012);
     genome.move_speed = rng.gen_range(0.7..1.4);
     genome.developmental_bias = rng.gen_range(0.05..0.35);
     genome

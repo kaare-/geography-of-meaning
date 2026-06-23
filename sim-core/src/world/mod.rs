@@ -9,9 +9,9 @@ pub mod water;
 
 pub use chunk::{Chunk, ChunkCoord};
 pub use sound::{
-    emit_incidental_sound, sample_material_acoustics, signature_with_age_band,
-    age_adjusted_vocal_profile, ActionSoundKind, MaterialAcousticProfile, SoundEmitterContext,
-    SoundEvent,
+    emit_environmental_sound, emit_incidental_sound, sample_material_acoustics,
+    signature_with_age_band, age_adjusted_vocal_profile, ActionSoundKind,
+    EnvironmentalSoundKind, MaterialAcousticProfile, SoundEmitterContext, SoundEvent,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -131,6 +131,7 @@ impl World {
 
         self.water_active_chunks = water_active;
         self.rain_chunks_this_tick.clear();
+        self.emit_environmental_sounds_after_climate();
         self.time += 1;
     }
 
@@ -147,9 +148,9 @@ impl World {
     }
 
     /// Slow geological tick: load propagation and collapse on active chunks.
-    pub fn tick_erosion(&mut self, nudge: f32) {
+    pub fn tick_erosion(&mut self, nudge: f32) -> Vec<Vec3f> {
         let active = self.active_chunks.clone();
-        tick_load_physics(&mut self.chunks, &active);
+        let collapses = tick_load_physics(&mut self.chunks, &active);
         self.chunks
             .par_iter_mut()
             .filter(|(coord, _)| active.contains(coord))
@@ -158,6 +159,38 @@ impl World {
                     *value = (*value + nudge).min(1.0);
                 }
             });
+        collapses
+    }
+
+    pub fn emit_environmental_sounds_after_climate(&mut self) {
+        if self.time % 9 != 0 {
+            return;
+        }
+        let coords: Vec<_> = self
+            .water_active_chunks
+            .iter()
+            .filter(|coord| {
+                (self.time.wrapping_mul(17) ^ coord.x as u64 ^ coord.y as u64) % 4 == 0
+            })
+            .copied()
+            .collect();
+        for coord in coords {
+            let center = chunk_center_world_pos(coord);
+            emit_environmental_sound(
+                self,
+                center,
+                EnvironmentalSoundKind::WaterFlow,
+                0.6,
+            );
+        }
+    }
+
+    fn emit_rain_ambient_sounds(&mut self) {
+        let coords: Vec<_> = self.rain_chunks_this_tick.iter().copied().collect();
+        for coord in coords {
+            let center = chunk_center_world_pos(coord);
+            emit_environmental_sound(self, center, EnvironmentalSoundKind::Rain, 0.5);
+        }
     }
 
     pub fn process_events(&mut self) {
@@ -175,6 +208,7 @@ impl World {
                 }
             }
         }
+        self.emit_rain_ambient_sounds();
     }
 
     pub fn queue_rain(&mut self, amount: f32) {
@@ -260,11 +294,20 @@ impl World {
                 for dz in -1..=1 {
                     let check = Vec3i::new(base.x + dx, base.y + dy, base.z + dz);
                     if let Some(voxel) = self.sample_voxel_mut(check) {
-                        *voxel.organic = (*voxel.organic + 0.12).min(0.5);
-                        *voxel.water_content = (*voxel.water_content + 0.05).min(0.4);
+                        *voxel.organic = (*voxel.organic + 0.13).min(0.5);
+                        *voxel.water_content = (*voxel.water_content + 0.058).min(0.4);
                     }
                 }
             }
         }
     }
+}
+
+fn chunk_center_world_pos(coord: ChunkCoord) -> Vec3f {
+    let half = CHUNK_SIZE as i32 / 2;
+    Vec3f::new(
+        (coord.x * CHUNK_SIZE as i32 + half) as f32,
+        (coord.y * CHUNK_SIZE as i32 + half) as f32,
+        (coord.z * CHUNK_SIZE as i32 + half) as f32,
+    )
 }

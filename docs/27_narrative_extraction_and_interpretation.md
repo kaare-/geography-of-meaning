@@ -292,6 +292,7 @@ See [00_project_overview.md](00_project_overview.md) — **meaning = predictive 
 | Mechanism | Location | Status |
 |-----------|----------|--------|
 | Narrative extraction pipeline | `export/narrative.rs` | Partial — `narrative_summary.json` from tick log |
+| `population_concept_count` | `export/narrative.rs` | End-of-run concept total from final tick snapshots |
 | Event significance scoring | — | Planned |
 | Biography / genealogy export | — | Planned |
 | Query interface | — | Planned |

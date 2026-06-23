@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use rayon::prelude::*;
+use crate::math::Vec3f;
 
 use super::chunk::{Chunk, ChunkCoord};
 use super::voxel::{idx, CHUNK_SIZE};
@@ -27,18 +27,22 @@ pub fn apply_trail_wear(voxel: &mut VoxelViewMut<'_>) {
 }
 
 /// Propagate load downward through solid columns and collapse overloaded voxels.
+/// Returns world positions where collapse occurred (for ambient sound emission).
 pub fn tick_load_physics(
     chunks: &mut HashMap<ChunkCoord, Chunk>,
     active_chunks: &HashSet<ChunkCoord>,
-) {
-    let active = active_chunks.clone();
-    chunks
-        .par_iter_mut()
-        .filter(|(coord, _)| active.contains(coord))
-        .for_each(|(_, chunk)| propagate_load_in_chunk(chunk));
+) -> Vec<Vec3f> {
+    let mut collapses = Vec::new();
+    for coord in active_chunks {
+        if let Some(chunk) = chunks.get_mut(coord) {
+            collapses.extend(propagate_load_in_chunk(chunk));
+        }
+    }
+    collapses
 }
 
-fn propagate_load_in_chunk(chunk: &mut Chunk) {
+fn propagate_load_in_chunk(chunk: &mut Chunk) -> Vec<Vec3f> {
+    let mut collapses = Vec::new();
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
             let mut accumulated = 0.0f32;
@@ -59,8 +63,20 @@ fn propagate_load_in_chunk(chunk: &mut Chunk) {
                         .min(1.0);
                     accumulated *= 0.85;
                     chunk.fields.load[i] = accumulated;
+                    let wx =
+                        chunk.coord.x * CHUNK_SIZE as i32 + x as i32;
+                    let wy =
+                        chunk.coord.y * CHUNK_SIZE as i32 + y as i32;
+                    let wz =
+                        chunk.coord.z * CHUNK_SIZE as i32 + z as i32;
+                    collapses.push(Vec3f::new(
+                        wx as f32 + 0.5,
+                        wy as f32 + 0.5,
+                        wz as f32 + 0.5,
+                    ));
                 }
             }
         }
     }
+    collapses
 }
