@@ -292,6 +292,7 @@ See [18_performance_architecture.md](18_performance_architecture.md).
 | Reproduction + birth log | `lifecycle.rs`, `export/logs.rs` |
 | Sleep cycle | `creature.rs`, `engine.rs` |
 | Prediction bias | `memory/graph.rs`, `creatures/actions.rs` |
+| Tick order | `engine.rs` — sleep/imagination → active concepts → predict → action |
 | `SimulationConfig` (multi-rate) | `sim-core/src/simulation/scheduler.rs` |
 | World climate/water/events/active chunks | `sim-core/src/world/mod.rs` |
 | Creature loop | `engine.rs` + `creatures/` |
@@ -300,8 +301,6 @@ See [18_performance_architecture.md](18_performance_architecture.md).
 
 ## Planned
 
-- Full tick order: sound → concepts → spreading activation → prediction → action
-- Per-tick or incremental export
 - `SimulationEvent` queue for delayed effects
 
 ## Core Principle

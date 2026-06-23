@@ -218,13 +218,15 @@ Collective memory exceeds individual memory.
 | `read_sensors()` neighborhood sampling | `creatures/sensors.rs` | Local gradient traces |
 | `Experience.outcome` | `creatures/creature.rs` | Prediction error scalar |
 | `MemoryGraph::find_similar_sensory` | `memory/graph.rs` | Familiar vs novel patterns |
-| `Genome::move_speed` | `creatures/genome.rs` | Movement inheritance (unused in selection) |
+| `novelty_score` | `memory/graph.rs` | 1 − max sensory similarity |
+| `prediction_uncertainty` | `memory/graph.rs` | Low-confidence paths boost exploration |
+| Uncertainty × novelty in `choose_action` | `creatures/actions.rs` | Move/dig weight boost |
+| `Genome::move_speed` | `spatial.rs`, `actions.rs` | Movement energy cost + exploration tradeoff |
+| `mean_displacement`, `novel_sensor_fraction` | `export/logs.rs`, `narrative.rs` | Per-tick exploration metrics |
 | Spawn position scoring | `world/mod.rs` | Pre-existing favorable patches |
 
 ## Planned
 
-- Prediction-driven exploration (uncertainty-weighted action selection)
-- Imagination / graph extrapolation before movement
 - Morphology-based scout vs settler tradeoffs
 - Communication of discovered patterns
 - Infrastructure traces that alter future sensor readings

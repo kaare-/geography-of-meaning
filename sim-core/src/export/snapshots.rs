@@ -3,7 +3,7 @@ use serde::Serialize;
 use crate::creatures::Creature;
 use crate::creatures::morphology::Morphology;
 use crate::math::Vec3f;
-use crate::memory::{ActiveConcept, MemoryNodeSummary};
+use crate::memory::{ActiveConcept, ConceptNode, MemoryNodeSummary};
 use crate::simulation::Simulation;
 use crate::world::chunk::Chunk;
 use crate::world::voxel::{idx, CHUNK_SIZE};
@@ -30,6 +30,25 @@ pub struct ChunkSnapshot {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ConceptNodeSnapshot {
+    pub id: u64,
+    pub prototype: crate::creatures::SensorState,
+    pub member_count: usize,
+    pub strength: f32,
+}
+
+impl From<&ConceptNode> for ConceptNodeSnapshot {
+    fn from(concept: &ConceptNode) -> Self {
+        Self {
+            id: concept.id,
+            prototype: concept.prototype,
+            member_count: concept.member_node_ids.len(),
+            strength: concept.strength,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct CreatureSnapshot {
     pub id: u64,
     pub position: Vec3f,
@@ -50,6 +69,7 @@ pub struct CreatureSnapshot {
     pub memory_edges: usize,
     pub memory_nodes_by_type: MemoryNodeSummary,
     pub concept_count: usize,
+    pub concept_nodes: Vec<ConceptNodeSnapshot>,
     pub active_concepts: Vec<ActiveConcept>,
     pub trusted_signature_count: usize,
 }
@@ -76,6 +96,7 @@ impl CreatureSnapshot {
             memory_edges: creature.memory_graph.edges.len(),
             memory_nodes_by_type: creature.memory_graph.node_summary(),
             concept_count: creature.concepts.len(),
+            concept_nodes: creature.concepts.iter().map(ConceptNodeSnapshot::from).collect(),
             active_concepts: creature.active_concepts.clone(),
             trusted_signature_count: creature.memory_graph.trusted_signature_count(),
         }

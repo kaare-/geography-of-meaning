@@ -27,6 +27,10 @@ pub struct SimulationConfig {
     pub erosion_tick_interval: u64,
     /// Write `world_tick_{t}.json` every N ticks; 0 = final snapshot only.
     pub snapshot_interval: u64,
+    /// Optional edge noise during sleep imagination replay.
+    pub dream_noise: bool,
+    /// Print a one-line progress message to stdout every N ticks; 0 = disabled.
+    pub progress_every: u64,
     /// Ticks per simulated day (diurnal phase); mirrored from `world::TICKS_PER_DAY`.
     pub ticks_per_day: u64,
 }
@@ -43,6 +47,8 @@ impl Default for SimulationConfig {
             climate_water_every_tick: true,
             erosion_tick_interval: DEFAULT_EROSION_TICK_INTERVAL,
             snapshot_interval: 0,
+            dream_noise: false,
+            progress_every: 0,
             ticks_per_day: TICKS_PER_DAY,
         }
     }

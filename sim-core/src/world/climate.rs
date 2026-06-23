@@ -41,6 +41,10 @@ pub fn apply_climate_to_chunk(climate: &GlobalClimate, chunk: &mut Chunk) {
             * 0.01
             * surface_bias;
         chunk.fields.humidity[i] += (climate.humidity - chunk.fields.humidity[i]) * 0.005;
+        if chunk.fields.void_fraction[i] > 0.35 && chunk.fields.organic[i] < 0.14 {
+            chunk.fields.organic[i] =
+                (chunk.fields.organic[i] + 0.0003 * climate.humidity).min(0.16);
+        }
     }
 }
 

@@ -63,6 +63,17 @@ const APPLY_BINDER_FATIGUE_COST: f32 = 0.12;
 const BINDER_ORGANIC_COST: f32 = 0.04;
 const TRANSFER_ORGANIC_BASE_WEIGHT: f32 = 0.12;
 
+const UNCERTAINTY_EXPLORATION_BOOST: f32 = 0.12;
+
+fn effective_exploration_rate(creature: &Creature) -> f32 {
+    let uncertainty = creature.memory_graph.prediction_uncertainty(
+        creature.sensor,
+        &creature.active_concepts,
+        &creature.concepts,
+    );
+    (EXPLORATION_RATE + uncertainty * UNCERTAINTY_EXPLORATION_BOOST).clamp(0.05, 0.45)
+}
+
 pub fn choose_action<R: Rng + ?Sized>(
     creature: &Creature,
     rng: &mut R,
@@ -189,7 +200,26 @@ pub fn choose_action<R: Rng + ?Sized>(
         }
     }
 
-    if !sleeping && rng.gen::<f32>() >= EXPLORATION_RATE {
+    if !sleeping {
+        let novelty = creature.memory_graph.novelty_score(creature.sensor);
+        let uncertainty = creature.memory_graph.prediction_uncertainty(
+            creature.sensor,
+            &creature.active_concepts,
+            &creature.concepts,
+        );
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Move(_))) {
+            weights[i].1 += novelty * 1.5;
+            weights[i].1 *= 1.0 / creature.genome.move_speed.max(0.5);
+        }
+        let explore_boost = uncertainty * novelty * 0.8;
+        for (action, weight) in &mut weights {
+            if matches!(action, Action::Move(_)) || matches!(action, Action::Dig) {
+                *weight += explore_boost;
+            }
+        }
+    }
+
+    if !sleeping && rng.gen::<f32>() >= effective_exploration_rate(creature) {
         let predictions = creature.memory_graph.predict_action_outcomes(
             creature.sensor,
             &creature.active_concepts,
@@ -260,7 +290,9 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                                 let transfer = (*voxel.organic * 0.25).min(0.12);
                                 *voxel.organic -= transfer;
                                 creature.regulatory.energy =
-                                    (creature.regulatory.energy + transfer * 2.5).min(1.0);
+                                    (creature.regulatory.energy + transfer * 2.7).min(1.0);
+                                creature.regulatory.integrity =
+                                    (creature.regulatory.integrity + 0.012).min(1.0);
                                 creature.regulatory.apply_action_cost(0.02, 0.05);
                                 consumed = true;
                             }
@@ -280,6 +312,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
         Action::Rest => {
             creature.regulatory.fatigue = (creature.regulatory.fatigue - 0.15).max(0.0);
             creature.regulatory.energy = (creature.regulatory.energy + 0.07).min(1.0);
+            creature.regulatory.integrity = (creature.regulatory.integrity + 0.018).min(1.0);
             if creature.sensor.chemical_wet_mineral > 0.15 {
                 creature.regulatory.hydration = (creature.regulatory.hydration
                     + creature.sensor.chemical_wet_mineral * 0.03)

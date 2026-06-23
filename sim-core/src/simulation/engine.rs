@@ -112,8 +112,22 @@ impl Simulation {
             && timestamp % self.config.erosion_tick_interval == 0;
 
         let creature_count = self.creatures.len();
+        let dream_noise = self.config.dream_noise;
         let mut chosen_actions = Vec::with_capacity(creature_count);
-        for creature in &self.creatures {
+        let mut tick_concepts_formed = 0u32;
+        let mut tick_imagination = 0u32;
+        let mut tick_merge = 0u32;
+        let mut tick_split = 0u32;
+
+        for creature in &mut self.creatures {
+            let sleep_result = creature.update_sleep(dream_noise, &mut self.rng);
+            tick_concepts_formed += sleep_result.concepts_formed;
+            tick_imagination += sleep_result.imagination_events;
+            tick_merge += sleep_result.merge_count;
+            tick_split += sleep_result.split_count;
+            creature.try_enter_sleep();
+            creature.try_early_wake();
+            creature.refresh_active_concepts();
             let sleeping = creature.sleep.sleeping;
             let heard_signature = dominant_heard_signature(creature, &self.world);
             let heard_call_frequency =
@@ -129,16 +143,15 @@ impl Simulation {
 
         let mut deaths = Vec::new();
         let mut surviving = Vec::with_capacity(creature_count);
-        let mut concepts_formed = 0u32;
         let mut action_counts = ActionCounts::default();
         let mut push_events = Vec::new();
+        let mut total_displacement = 0.0f32;
+        let mut novel_sensor_ticks = 0u32;
 
         for idx in 0..creature_count {
             let action = chosen_actions[idx];
             let mut creature = self.creatures[idx].clone();
-
-            concepts_formed += creature.update_sleep();
-            creature.try_enter_sleep();
+            let position_before = creature.position;
 
             let sensory_before = creature.sensor;
             let state_before = creature.regulatory;
@@ -159,9 +172,9 @@ impl Simulation {
             if erosion_damage_tick {
                 let pos = creature.position.floor_i();
                 if let Some(voxel) = self.world.sample_voxel(pos) {
-                    if voxel.erosion_damage > 0.5 {
+                    if voxel.erosion_damage > 0.55 {
                         creature.regulatory.integrity -=
-                            (voxel.erosion_damage - 0.5) * 0.02;
+                            (voxel.erosion_damage - 0.55) * 0.008;
                     }
                 }
             }
@@ -246,6 +259,15 @@ impl Simulation {
                 }
             }
             creature.refresh_active_concepts();
+            if !sleeping && creature.memory_graph.novelty_score(creature.sensor) > 0.65 {
+                novel_sensor_ticks += 1;
+            }
+            total_displacement += {
+                let dx = creature.position.x - position_before.x;
+                let dy = creature.position.y - position_before.y;
+                let dz = creature.position.z - position_before.z;
+                (dx * dx + dy * dy + dz * dz).sqrt()
+            };
             creature
                 .regulatory
                 .clamp(creature.morphology.reserve_capacity);
@@ -283,7 +305,6 @@ impl Simulation {
                 creature.memory_graph.record_experience(&exp);
             }
             creature.push_experience(exp);
-            self.creatures[idx] = creature.clone();
             surviving.push(creature);
         }
 
@@ -341,7 +362,20 @@ impl Simulation {
                 .collect(),
             deaths,
             births,
-            concepts_formed,
+            concepts_formed: tick_concepts_formed,
+            concept_merge_count: tick_merge,
+            concept_split_count: tick_split,
+            imagination_events: tick_imagination,
+            mean_displacement: if creature_count > 0 {
+                total_displacement / creature_count as f32
+            } else {
+                0.0
+            },
+            novel_sensor_fraction: if creature_count > 0 {
+                novel_sensor_ticks as f32 / creature_count as f32
+            } else {
+                0.0
+            },
             transfer_count: action_counts.transfer_organic_count,
             action_counts,
             push_events,
@@ -351,6 +385,17 @@ impl Simulation {
                 .map(crate::export::snapshots::CreatureSnapshot::from_creature)
                 .collect(),
         });
+
+        if self.config.progress_every > 0 && self.world.time % self.config.progress_every == 0 {
+            let concept_total: usize = self.creatures.iter().map(|c| c.concepts.len()).sum();
+            println!(
+                "tick {}/{} pop={} concepts={}",
+                self.world.time,
+                self.config.ticks,
+                self.creatures.len(),
+                concept_total,
+            );
+        }
     }
 
     pub fn run(&mut self) {

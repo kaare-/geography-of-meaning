@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use rand::Rng;
+
 use crate::math::Vec3f;
 use crate::memory::{activate_concepts, ActiveConcept, ConceptNode, ConceptNodeId, MemoryGraph};
 use crate::world::sound::SoundEmitterContext;
@@ -13,8 +15,17 @@ use super::sensors::SensorState;
 pub const MAX_RECENT_EXPERIENCE: usize = 64;
 
 pub const SLEEP_FATIGUE_THRESHOLD: f32 = 0.65;
-pub const SLEEP_LIGHT_THRESHOLD: f32 = 0.35;
+pub const SLEEP_LIGHT_THRESHOLD: f32 = 0.45;
+pub const SLEEP_WAKE_FATIGUE: f32 = 0.35;
 pub const SLEEP_DURATION_TICKS: u32 = 15;
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SleepUpdateResult {
+    pub concepts_formed: u32,
+    pub imagination_events: u32,
+    pub merge_count: u32,
+    pub split_count: u32,
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SleepState {
@@ -84,24 +95,53 @@ impl Creature {
         }
     }
 
-    pub fn update_sleep(&mut self) -> u32 {
+    pub fn update_sleep<R: Rng + ?Sized>(
+        &mut self,
+        dream_noise: bool,
+        rng: &mut R,
+    ) -> SleepUpdateResult {
+        let mut result = SleepUpdateResult::default();
         if !self.sleep.sleeping {
-            return 0;
+            return result;
         }
         let at_sleep_start = self.sleep.ticks_remaining == SLEEP_DURATION_TICKS;
         if self.sleep.ticks_remaining > 0 {
             self.sleep.ticks_remaining -= 1;
         }
         let at_wake = self.sleep.ticks_remaining == 0;
-        if !(at_sleep_start || at_wake) {
-            return 0;
+        if !at_wake {
+            if at_sleep_start {
+                // Sleep onset: no graph consolidation (deferred to wake).
+            } else {
+                result.imagination_events = self.memory_graph.imagination_replay(
+                    &self.concepts,
+                    dream_noise,
+                    rng,
+                );
+            }
+            if self.sleep.ticks_remaining == 0 {
+                self.sleep.sleeping = false;
+            }
+            return result;
         }
-        let new_concepts = self
-            .memory_graph
-            .consolidate_sleep(&self.recent_experience, &mut self.next_concept_id);
-        let formed = new_concepts.len() as u32;
-        for concept in new_concepts {
-            if !self.concept_nodes.contains(&concept.id) {
+        let consolidation = self.memory_graph.consolidate_sleep(
+            &self.recent_experience,
+            &mut self.next_concept_id,
+            &self.concepts,
+        );
+        result.concepts_formed = consolidation.concepts.len() as u32;
+        result.merge_count = consolidation.merge_count;
+        result.split_count = consolidation.split_count;
+        for concept in consolidation.concepts {
+            if let Some(existing) = self.concepts.iter_mut().find(|c| c.id == concept.id) {
+                existing.prototype = concept.prototype;
+                existing.strength = concept.strength.max(existing.strength);
+                for mid in concept.member_node_ids {
+                    if !existing.member_node_ids.contains(&mid) {
+                        existing.member_node_ids.push(mid);
+                    }
+                }
+            } else if !self.concept_nodes.contains(&concept.id) {
                 self.concept_nodes.push(concept.id);
                 self.concepts.push(concept);
             }
@@ -109,7 +149,13 @@ impl Creature {
         if at_wake {
             self.sleep.sleeping = false;
         }
-        formed
+        result
+    }
+
+    pub fn try_early_wake(&mut self) {
+        if self.sleep.sleeping && self.regulatory.fatigue < SLEEP_WAKE_FATIGUE {
+            self.sleep.ticks_remaining = 0;
+        }
     }
 
     pub fn try_enter_sleep(&mut self) {

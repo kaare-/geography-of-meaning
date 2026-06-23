@@ -38,12 +38,12 @@ impl RegulatoryState {
     pub fn apply_environmental_stress(&mut self, sensor: &SensorState, heat_retention: f32, mass: f32) {
         let coupling = (1.0 / (1.0 + mass * heat_retention * 0.6)).clamp(0.15, 1.0);
         self.temperature_stress = sensor.internal_temperature_stress * coupling;
-        if self.temperature_stress > 0.85 {
+        if self.temperature_stress > 0.88 {
             self.integrity =
-                (self.integrity - (self.temperature_stress - 0.85) * 0.007).max(0.0);
+                (self.integrity - (self.temperature_stress - 0.88) * 0.005).max(0.0);
         }
-        if self.fatigue > 0.9 {
-            self.integrity = (self.integrity - 0.001).max(0.0);
+        if self.fatigue > 0.92 {
+            self.integrity = (self.integrity - 0.0005).max(0.0);
         }
     }
 

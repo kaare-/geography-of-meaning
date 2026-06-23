@@ -58,6 +58,11 @@ pub struct TickLogEntry {
     pub deaths: Vec<DeathEvent>,
     pub births: Vec<BirthEvent>,
     pub concepts_formed: u32,
+    pub concept_merge_count: u32,
+    pub concept_split_count: u32,
+    pub imagination_events: u32,
+    pub mean_displacement: f32,
+    pub novel_sensor_fraction: f32,
     pub transfer_count: u32,
     pub action_counts: ActionCounts,
     #[serde(skip_serializing_if = "Vec::is_empty")]

@@ -294,8 +294,8 @@ impl World {
                 for dz in -1..=1 {
                     let check = Vec3i::new(base.x + dx, base.y + dy, base.z + dz);
                     if let Some(voxel) = self.sample_voxel_mut(check) {
-                        *voxel.organic = (*voxel.organic + 0.13).min(0.5);
-                        *voxel.water_content = (*voxel.water_content + 0.058).min(0.4);
+                        *voxel.organic = (*voxel.organic + 0.18).min(0.55);
+                        *voxel.water_content = (*voxel.water_content + 0.075).min(0.45);
                     }
                 }
             }

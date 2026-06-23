@@ -121,18 +121,20 @@ Researcher labels (food, caves, shelter, water sources) describe emergent cluste
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| `consolidate_sleep()` | `memory/graph.rs` | Edge strengthen/weaken on recent experiences |
+| `consolidate_sleep()` | `memory/graph.rs` | Edge strengthen/weaken; concept cluster/merge/split |
+| `imagination_replay()` | `memory/graph.rs` | Offline spread activation during sleep ticks |
+| `try_early_wake()` | `creature.rs` | Exit sleep when fatigue < 0.35 |
+| `dream_noise` config | `scheduler.rs` | Optional edge noise during imagination |
+| `imagination_events` | `export/logs.rs` | Per-tick sleep replay count |
 | `fatigue`, `Rest` | `regulation.rs`, `actions.rs` | Partial recovery + wet-environment hydration |
-| Sleep state / trigger | `creature.rs`, `engine.rs` | Fatigue + low light (diurnal-modulated) |
+| Sleep state / trigger | `creature.rs`, `engine.rs` | Fatigue > 0.65 + light < 0.45 |
 | Sensory attenuation | `sensors.rs` `read_sensors_with_noise` | 0.25× noise while sleeping |
 | Sleep in snapshot | `export/snapshots.rs` | `sleeping`, `sleep_ticks_remaining` |
 
 ## Planned
 
-- Full consolidation pass
-- Concept merge/split in `memory/concepts.rs`
-- Spreading activation + imagination replay
-- Integration with [08_prediction.md](08_prediction.md) for offline spreading activation
+- Richer imagination replay (multi-seed chains)
+- Integration with [08_prediction.md](08_prediction.md) for offline prediction scoring
 
 ## Open questions
 

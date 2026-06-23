@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::creatures::Creature;
 use crate::memory::edges::{EdgeType, MemoryEdge};
+use crate::memory::graph::ActionPredictions;
 use crate::memory::nodes::{MemoryNode, NodeKind};
 use crate::simulation::Simulation;
 
@@ -18,6 +19,8 @@ pub struct MemoryGraphExport {
     pub nodes: Vec<MemoryNode>,
     pub edges: Vec<MemoryEdge>,
     pub nodes_by_type: crate::memory::graph::MemoryNodeSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_predictions: Option<ActionPredictions>,
 }
 
 impl MemoryGraphExport {
@@ -29,6 +32,11 @@ impl MemoryGraphExport {
             nodes: creature.memory_graph.nodes.clone(),
             edges: creature.memory_graph.edges.clone(),
             nodes_by_type: creature.memory_graph.node_summary(),
+            action_predictions: Some(creature.memory_graph.predict_action_outcomes(
+                creature.sensor,
+                &creature.active_concepts,
+                &creature.concepts,
+            )),
         }
     }
 }
@@ -109,6 +117,24 @@ pub fn write_memory_graphml(creature: &Creature, path: &Path) -> Result<(), Expo
     out.push_str("  </graph>\n</graphml>\n");
     fs::write(path, out)?;
     Ok(())
+}
+
+pub fn write_interval_memory_export(
+    sim: &Simulation,
+    output_dir: &Path,
+    tick: u64,
+) -> Result<Option<String>, ExportError> {
+    let creature = sim
+        .creatures
+        .iter()
+        .max_by_key(|c| c.concepts.len())
+        .or_else(|| sim.creatures.first());
+    let Some(creature) = creature else {
+        return Ok(None);
+    };
+    let path = output_dir.join(format!("snapshots/memory_creature_best_tick_{tick}.json"));
+    write_memory_graph(creature, &path)?;
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 pub fn export_memory_for_sim(sim: &Simulation, output_dir: &Path) -> Result<Option<String>, ExportError> {

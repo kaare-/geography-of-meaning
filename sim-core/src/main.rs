@@ -1,5 +1,6 @@
 use clap::Parser;
 use sim_core::export::{export_all, resolve_output_dir, write_snapshot};
+use sim_core::export::memory_dump::write_interval_memory_export;
 use sim_core::simulation::{Simulation, SimulationConfig};
 
 #[derive(Parser, Debug)]
@@ -24,6 +25,10 @@ struct Args {
     /// Write world_tick_{t}.json every N ticks (0 = final snapshot only).
     #[arg(long, default_value_t = 0)]
     snapshot_interval: u64,
+
+    /// Print progress every N ticks (0 = disabled).
+    #[arg(long, default_value_t = 0)]
+    progress_every: u64,
 }
 
 fn main() {
@@ -36,6 +41,7 @@ fn main() {
         creature_count: args.creatures,
         output_dir: resolve_output_dir(&args.output),
         snapshot_interval: args.snapshot_interval,
+        progress_every: args.progress_every,
         ..SimulationConfig::default()
     };
 
@@ -49,6 +55,10 @@ fn main() {
             let path = output_dir.join(format!("snapshots/world_tick_{}.json", sim.world.time));
             if let Err(e) = write_snapshot(&sim, &path) {
                 eprintln!("Interval snapshot failed: {e}");
+                std::process::exit(1);
+            }
+            if let Err(e) = write_interval_memory_export(&sim, &output_dir, sim.world.time) {
+                eprintln!("Interval memory export failed: {e}");
                 std::process::exit(1);
             }
         }

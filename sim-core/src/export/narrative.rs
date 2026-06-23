@@ -29,7 +29,13 @@ pub struct NarrativeSummary {
     pub total_digs: u32,
     pub total_concepts_formed: u32,
     pub population_concept_count: usize,
+    /// Highest sum of `concept_count` across all creatures in a single tick.
+    pub peak_population_concept_count: usize,
+    pub peak_population_concept_count_tick: u64,
     pub concept_spike_count: usize,
+    pub mean_tick_displacement: f32,
+    pub mean_novel_sensor_fraction: f32,
+    pub total_imagination_events: u32,
 }
 
 pub fn extract_narrative(tick_logs: &[TickLogEntry]) -> NarrativeSummary {
@@ -42,12 +48,26 @@ pub fn extract_narrative(tick_logs: &[TickLogEntry]) -> NarrativeSummary {
     let mut total_digs = 0u32;
     let mut total_concepts_formed = 0u32;
     let mut concept_spike_count = 0usize;
+    let mut peak_population_concept_count = 0usize;
+    let mut peak_population_concept_count_tick = 0u64;
+    let mut displacement_sum = 0.0f32;
+    let mut novel_fraction_sum = 0.0f32;
+    let mut total_imagination_events = 0u32;
 
     for entry in tick_logs {
         total_births += entry.births.len();
         total_deaths += entry.deaths.len();
         total_digs += entry.action_counts.dig_count;
         total_concepts_formed += entry.concepts_formed;
+        total_imagination_events += entry.imagination_events;
+        displacement_sum += entry.mean_displacement;
+        novel_fraction_sum += entry.novel_sensor_fraction;
+
+        let tick_concept_total: usize = entry.creatures.iter().map(|c| c.concept_count).sum();
+        if tick_concept_total > peak_population_concept_count {
+            peak_population_concept_count = tick_concept_total;
+            peak_population_concept_count_tick = entry.tick;
+        }
 
         if !entry.births.is_empty() && !saw_birth {
             saw_birth = true;
@@ -113,6 +133,7 @@ pub fn extract_narrative(tick_logs: &[TickLogEntry]) -> NarrativeSummary {
         }
     }
 
+    // End-of-run sum of concept_count across living creatures (not peak).
     let population_concept_count: usize = tick_logs
         .last()
         .map(|e| e.creatures.iter().map(|c| c.concept_count).sum())
@@ -125,7 +146,20 @@ pub fn extract_narrative(tick_logs: &[TickLogEntry]) -> NarrativeSummary {
         total_digs,
         total_concepts_formed,
         population_concept_count,
+        peak_population_concept_count,
+        peak_population_concept_count_tick,
         concept_spike_count,
+        mean_tick_displacement: if tick_logs.is_empty() {
+            0.0
+        } else {
+            displacement_sum / tick_logs.len() as f32
+        },
+        mean_novel_sensor_fraction: if tick_logs.is_empty() {
+            0.0
+        } else {
+            novel_fraction_sum / tick_logs.len() as f32
+        },
+        total_imagination_events,
     }
 }
 

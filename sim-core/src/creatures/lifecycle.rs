@@ -1,7 +1,9 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::creatures::sensors::SensorState;
 use crate::math::{Vec3f, Vec3i};
+use crate::memory::ConceptNode;
 use crate::world::World;
 
 use super::creature::Creature;
@@ -9,7 +11,7 @@ use super::genome::Genome;
 use super::morphology::Morphology;
 
 /// Organic matter returned to the voxel field when a creature dies.
-pub const DEATH_ORGANIC_DEPOSIT: f32 = 0.08;
+pub const DEATH_ORGANIC_DEPOSIT: f32 = 0.12;
 
 pub const REPRODUCTION_ENERGY_THRESHOLD: f32 = 0.6;
 pub const REPRODUCTION_CHANCE_PER_TICK: f32 = 0.02;
@@ -18,6 +20,10 @@ pub const REPRODUCTION_HIGH_ENERGY_THRESHOLD: f32 = 0.6;
 pub const ENERGY_DEPLETION_GRACE_TICKS: u8 = 3;
 pub const REPRODUCTION_ENERGY_COST: f32 = 0.25;
 pub const DEFAULT_MAX_POPULATION: usize = 30;
+
+const MAX_INHERITED_CONCEPTS: usize = 3;
+const INHERITANCE_STRENGTH_FACTOR: f32 = 0.8;
+const PROTOTYPE_NOISE_SCALE: f32 = 0.03;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeathCause {
@@ -106,6 +112,47 @@ fn mutate_signature<R: Rng + ?Sized>(parent: u64, rng: &mut R) -> u64 {
         .wrapping_add(rng.gen())
 }
 
+fn noise_prototype<R: Rng + ?Sized>(proto: SensorState, rng: &mut R) -> SensorState {
+    let mut v = proto.as_vector();
+    for channel in &mut v {
+        *channel = (*channel + rng.gen_range(-PROTOTYPE_NOISE_SCALE..PROTOTYPE_NOISE_SCALE))
+            .clamp(0.0, 1.0);
+    }
+    SensorState::from_vector(v)
+}
+
+/// Weak concept biases for offspring — not a full memory copy (see doc 13).
+pub fn inherit_parent_concepts<R: Rng + ?Sized>(
+    offspring: &mut Creature,
+    parent: &Creature,
+    rng: &mut R,
+) {
+    if parent.concepts.is_empty() {
+        return;
+    }
+    let mut indices: Vec<usize> = (0..parent.concepts.len()).collect();
+    for i in (1..indices.len()).rev() {
+        let j = rng.gen_range(0..=i);
+        indices.swap(i, j);
+    }
+    for idx in indices.into_iter().take(MAX_INHERITED_CONCEPTS) {
+        let parent_concept = &parent.concepts[idx];
+        let concept_id = offspring.next_concept_id;
+        offspring.next_concept_id += 1;
+        let inherited = ConceptNode {
+            id: concept_id,
+            prototype: noise_prototype(parent_concept.prototype, rng),
+            member_node_ids: Vec::new(),
+            strength: (parent_concept.strength * INHERITANCE_STRENGTH_FACTOR).clamp(0.05, 1.0),
+        };
+        offspring
+            .memory_graph
+            .seed_inherited_concept(&parent.memory_graph, parent_concept, &inherited);
+        offspring.concept_nodes.push(concept_id);
+        offspring.concepts.push(inherited);
+    }
+}
+
 pub fn try_reproduce<R: Rng + ?Sized>(
     parent: &Creature,
     world: &World,
@@ -138,6 +185,7 @@ pub fn try_reproduce<R: Rng + ?Sized>(
     offspring.morphology = morphology;
     offspring.regulatory.energy = 0.5;
     offspring.regulatory.hydration = 0.6;
+    inherit_parent_concepts(&mut offspring, parent, rng);
     let birth = BirthEvent {
         parent_id: parent.id,
         offspring_id,
