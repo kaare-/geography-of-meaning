@@ -16,6 +16,7 @@ pub struct SoundEventSnapshot {
     pub signal_family_id: u64,
     pub age: u32,
     pub duration: u32,
+    pub intentional: bool,
 }
 
 impl SoundEventSnapshot {
@@ -29,6 +30,7 @@ impl SoundEventSnapshot {
             signal_family_id: event.signal_family_id,
             age: event.age,
             duration: event.duration,
+            intentional: event.intentional,
         }
     }
 }

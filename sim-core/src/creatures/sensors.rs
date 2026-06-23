@@ -151,9 +151,12 @@ pub fn read_sensors_with_noise<R: Rng + ?Sized>(
 
     for sound in &world.active_sounds {
         let attenuated = sound.attenuated_at(creature.position);
-        sound_ambient += attenuated * 0.35;
-        if sound.emitter_id != creature.id {
-            sound_calls = sound_calls.max(attenuated);
+        if sound.intentional {
+            if sound.emitter_id != creature.id {
+                sound_calls = sound_calls.max(attenuated);
+            }
+        } else {
+            sound_ambient += attenuated * 0.35;
         }
     }
 
@@ -194,16 +197,27 @@ pub fn read_sensors_with_noise<R: Rng + ?Sized>(
     state
 }
 
-/// Strongest non-self sound at the listener position, if above noise floor.
+/// Strongest non-self intentional call at the listener position, if above noise floor.
 pub fn dominant_heard_signature(creature: &Creature, world: &World) -> Option<u64> {
+    dominant_heard_call(creature, world).map(|(sig, _)| sig)
+}
+
+/// Dominant intentional call: emitter signature and pitch profile.
+pub fn dominant_heard_call(creature: &Creature, world: &World) -> Option<(u64, f32)> {
     world
         .active_sounds
         .iter()
-        .filter(|s| s.emitter_id != creature.id)
-        .map(|s| (s.attenuated_at(creature.position), s.signature))
+        .filter(|s| s.intentional && s.emitter_id != creature.id)
+        .map(|s| {
+            (
+                s.attenuated_at(creature.position),
+                s.signature,
+                s.frequency_profile,
+            )
+        })
         .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-        .filter(|(att, _)| *att > 0.05)
-        .map(|(_, sig)| sig)
+        .filter(|(att, _, _)| *att > 0.05)
+        .map(|(_, sig, freq)| (sig, freq))
 }
 
 fn gaussian_noise<R: Rng + ?Sized>(rng: &mut R) -> f32 {

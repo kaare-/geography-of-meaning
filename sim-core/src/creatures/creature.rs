@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::math::Vec3f;
 use crate::memory::{activate_concepts, ActiveConcept, ConceptNode, ConceptNodeId, MemoryGraph};
+use crate::world::sound::SoundEmitterContext;
 
 use super::actions::Action;
 use super::genome::Genome;
@@ -124,6 +125,17 @@ impl Creature {
         self.recent_experience.push(exp);
         if self.recent_experience.len() > MAX_RECENT_EXPERIENCE {
             self.recent_experience.remove(0);
+        }
+    }
+
+    pub fn sound_emitter_context(&self) -> SoundEmitterContext {
+        SoundEmitterContext {
+            emitter_id: self.id,
+            signature: self.signature,
+            age: self.age,
+            mass: self.morphology.mass,
+            move_speed: self.genome.move_speed,
+            carried_mass: self.regulatory.carried_mass,
         }
     }
 }

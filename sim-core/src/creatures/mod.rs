@@ -22,5 +22,6 @@ pub use lifecycle::{
 };
 pub use regulation::RegulatoryState;
 pub use sensors::{
-    dominant_heard_signature, read_sensors, read_sensors_with_noise, SensorState,
+    dominant_heard_call, dominant_heard_signature, read_sensors, read_sensors_with_noise,
+    SensorState,
 };

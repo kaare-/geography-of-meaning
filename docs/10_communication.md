@@ -113,14 +113,15 @@ A sound becomes meaningful when it **changes expectations about future regulator
 | `Action::Follow` | `creatures/actions.rs`, `spatial.rs` | Biased by `chemical_creature` / `sound_calls`; engine resolves direction toward strongest neighbor gradient |
 | `NodeKind::Sound` (`intensity`, `signature`), `record_heard_sound` | `memory/graph.rs` | Sound nodes with emitter signature on hear |
 | `predict_action_outcomes` sound paths | `memory/graph.rs` | `SoundActivates` chains weighted by edge confidence and per-signature outcome boost |
-| `trusted_follow_boost`, `trusted_signature_count` | `memory/graph.rs`, `export/snapshots.rs` | Follow bias when calls salient + positive sound→outcome for signature |
-| `dominant_heard_signature` | `creatures/sensors.rs` | Resolves strongest non-self emitter per tick |
+| `trusted_follow_boost`, `developmental_follow_boost`, `trusted_signature_count` | `memory/graph.rs`, `export/snapshots.rs` | Follow bias when calls salient + memory history |
+| `dominant_heard_signature`, `dominant_heard_call` | `creatures/sensors.rs` | Strongest intentional emitter per tick |
 | `EdgeType::SoundActivates` | `memory/edges.rs` | Used on heard experiences |
 | `signature` | `creatures/creature.rs` | Assigned at spawn |
 | `genome.vocal_profile` | `creatures/genome.rs` | Pitch, duration, amplitude, rhythm; mutated on reproduction |
-| `SoundEvent::signal_family_id` | `world/sound.rs` | Hash of vocal profile for family tracking |
-| Tick log sound export | `export/logs.rs` | `sound_event_count` + optional slice with `signal_family_id` |
-| Listener signature match | `sensors.rs` `dominant_heard_signature` | Implemented |
+| `intentional` on `SoundEvent` | `world/sound.rs`, `export/logs.rs` | Exporter flag; sensors route to calls vs ambient |
+| `emit_incidental_sound` | `world/sound.rs`, `actions.rs`, `spatial.rs` | Low-amplitude action side-effects |
+| `sample_material_acoustics` | `world/sound.rs` | Material trace coupling at emission site |
+| `age_adjusted_vocal_profile`, `signature_with_age_band` | `world/sound.rs` | Developmental acoustic variation |
 | Trust as confidence | `memory/graph.rs` | Per-signature outcome boost in prediction; `trusted_signature_count` in snapshot |
 
 ## Planned
@@ -189,9 +190,10 @@ Before symbolic language, organisms benefit from anticipating conspecific future
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| `Action::EmitSound` | `creatures/actions.rs` | Intentional vocalization (partial) |
-| Incidental dig/move/carry sounds | — | **Planned** — low-amplitude `SoundEvent`s |
+| `Action::EmitSound` | `creatures/actions.rs` | Intentional vocalization (`intentional: true`) |
+| Incidental dig/move/carry sounds | `world/sound.rs`, `actions.rs`, `spatial.rs` | Low-amplitude `SoundEvent`s on resolving actions |
 | `Action::Follow` + `trusted_follow_boost` | `actions.rs`, `memory/graph.rs` | Social prediction stub (sprint 23) |
+| `developmental_follow_boost` | `memory/graph.rs` | High-pitch call + memory history × `developmental_bias` |
 | `vocal_profile` mutation | `creatures/genome.rs`, `lifecycle.rs` | Signal families (sprint 20) |
 | `signal_family_id` | `world/sound.rs` | Family hash on `SoundEvent` |
 

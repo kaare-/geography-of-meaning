@@ -3,7 +3,7 @@ use rand::{Rng, SeedableRng};
 
 use crate::creatures::{
     apply_action, choose_action, compute_follow_direction, deposit_creature_organic,
-    dominant_heard_signature, read_sensors_with_noise, resolve_position_overlaps,
+    dominant_heard_signature, dominant_heard_call, read_sensors_with_noise, resolve_position_overlaps,
     try_creature_move_at, try_creature_push_at, try_reproduce, Action, Creature, DeathEvent,
     Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, Genome, Morphology,
     REPRODUCTION_ENERGY_COST,
@@ -107,11 +107,14 @@ impl Simulation {
         for creature in &self.creatures {
             let sleeping = creature.sleep.sleeping;
             let heard_signature = dominant_heard_signature(creature, &self.world);
+            let heard_call_frequency =
+                dominant_heard_call(creature, &self.world).map(|(_, freq)| freq);
             chosen_actions.push(choose_action(
                 creature,
                 &mut self.rng,
                 sleeping,
                 heard_signature,
+                heard_call_frequency,
             ));
         }
 
@@ -346,5 +349,6 @@ fn random_spawn_genome<R: Rng + ?Sized>(rng: &mut R) -> Genome {
     genome.reserve_bias = rng.gen_range(0.3..0.9);
     genome.metabolism_rate = rng.gen_range(0.005..0.014);
     genome.move_speed = rng.gen_range(0.7..1.4);
+    genome.developmental_bias = rng.gen_range(0.05..0.35);
     genome
 }

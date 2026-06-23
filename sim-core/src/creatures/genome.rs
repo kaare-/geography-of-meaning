@@ -18,6 +18,8 @@ pub struct Genome {
     pub carry_bias: f32,
     /// Energy reserve ceiling bias.
     pub reserve_bias: f32,
+    /// Weak inherited bias toward juvenile-like acoustic signatures (memory-mediated).
+    pub developmental_bias: f32,
 }
 
 impl Default for Genome {
@@ -31,6 +33,7 @@ impl Default for Genome {
             heat_retention: 0.5,
             carry_bias: 1.0,
             reserve_bias: 0.5,
+            developmental_bias: 0.15,
         }
     }
 }
@@ -52,6 +55,8 @@ impl Genome {
             heat_retention: (parent.heat_retention + rng.gen_range(-0.05..0.05)).clamp(0.05, 1.0),
             carry_bias: (parent.carry_bias + rng.gen_range(-0.08..0.08)).clamp(0.4, 2.2),
             reserve_bias: (parent.reserve_bias + rng.gen_range(-0.05..0.05)).clamp(0.2, 1.0),
+            developmental_bias: (parent.developmental_bias + rng.gen_range(-0.04..0.04))
+                .clamp(0.0, 0.5),
         }
     }
 }

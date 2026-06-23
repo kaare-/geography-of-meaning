@@ -145,7 +145,7 @@ Physical actions disturb the environment and produce sound as a side effect of w
 | Rest | Low-amplitude settling, breathing proxy |
 | Vocalization (`EmitSound`) | Intentional call — see [10_communication.md](10_communication.md) |
 
-**Planned:** each resolving action emits low-amplitude `SoundEvent`s into `World::active_sounds`; sensors aggregate them into `sound_ambient` (environmental + incidental) and `sound_calls` (conspecific intentional emissions). No action opcode carries a semantic sound label.
+**Implemented:** each resolving action emits low-amplitude `SoundEvent`s into `World::active_sounds`; sensors aggregate them into `sound_ambient` (environmental + incidental) and `sound_calls` (conspecific intentional emissions). No action opcode carries a semantic sound label.
 
 ### Material Coupling
 
@@ -159,7 +159,7 @@ Local voxel fields shape how the same action sounds — without exposing materia
 | Organic | Soft crunch, decay rustle |
 | Void / low solid fraction | Hollow echo, less attenuation |
 
-**Planned:** sensor read derives acoustic timbre from neighborhood fractions (`hard_mineral`, `soft_mineral`, `clay`, `organic`, `void_fraction`, moisture) as continuous scalars — creatures see only the resulting trace vector, never `"granite"` or `"mud"`.
+**Implemented:** sensor read derives acoustic timbre from neighborhood fractions (`hard_mineral`, `soft_mineral`, `clay`, `organic`, `void_fraction`, moisture) as continuous scalars — creatures see only the resulting trace vector, never `"granite"` or `"mud"`.
 
 ### Morphology Coupling
 
@@ -171,7 +171,7 @@ Body parameters modulate incidental sound production:
 | `move_speed` (genome) | Faster cadence, sharper rhythm |
 | `carried_mass` | Heavier footfalls, louder placement |
 
-**Implemented:** `Morphology` (`creatures/morphology.rs`) — `mass`, `carry_capacity`, `heat_retention`, `reserve_capacity` derived from genome at spawn and inherited on reproduction. Incidental sound emission from morphology is **planned** (sprint after communication incidental-signals addendum).
+**Implemented:** `Morphology` (`creatures/morphology.rs`) — `mass`, `carry_capacity`, `heat_retention`, `reserve_capacity` derived from genome at spawn and inherited on reproduction. Incidental sound emission scales amplitude and rhythm via `SoundEmitterContext`.
 
 ### Acoustic Ecology
 
@@ -181,8 +181,8 @@ The soundscape mixes natural and organism-generated traces:
 |--------|--------------|--------|
 | Water flow, rain | `sound_ambient` | Partial (ambient floor from active sounds) |
 | Collapse / erosion | `sound_ambient` | Planned |
-| Movement, digging, feeding | `sound_ambient` | Planned (incidental `SoundEvent`s) |
-| Construction (place, binder) | `sound_ambient` | Planned |
+| Movement, digging, feeding | `sound_ambient` | Implemented (incidental `SoundEvent`s) |
+| Construction (place, binder) | `sound_ambient` | Partial (place emits; binder planned) |
 | Intentional calls | `sound_calls` | Partial (`EmitSound` → `SoundEvent`) |
 
 Acoustic ecology is **competitive attention** — loud natural events can mask or contextualize social signals. Listeners learn which trace combinations precede regulatory outcomes, not which "source type" spoke.
@@ -201,11 +201,14 @@ These are **memory edges** (`SoundActivates`, `precedes`, `action_leads_to`) —
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| `sound_ambient`, `sound_calls` | `creatures/sensors.rs` | Read from `World::active_sounds` |
-| `EmitSound` → `SoundEvent` | `creatures/actions.rs`, `world/sound.rs` | Intentional vocalization only |
-| Incidental action sounds | — | **Planned** (dig/move/carry/etc.) |
-| `Morphology` | `creatures/morphology.rs` | Implemented; sound coupling planned |
-| Material acoustic coupling | `sensors.rs` neighborhood read | **Planned** (trace-only, no material names) |
+| `sound_ambient`, `sound_calls` | `creatures/sensors.rs` | Incidental → ambient; intentional → calls |
+| `EmitSound` → `SoundEvent` | `creatures/actions.rs`, `world/sound.rs` | Intentional vocalization (`intentional: true`) |
+| `emit_incidental_sound` | `world/sound.rs` | Move, dig, carry, drop, push, consume, place |
+| `intentional` flag | `world/sound.rs`, `export/logs.rs` | Distinguishes calls from action noise |
+| `sample_material_acoustics` | `world/sound.rs` | Voxel hard/soft/wet/organic/void → timbre |
+| Morphology sound coupling | `world/sound.rs` | Mass, speed, carried_mass scale amplitude/rhythm |
+| Age-scaled signatures | `world/sound.rs` | `signature_with_age_band`, `age_adjusted_vocal_profile` |
+| `Morphology` | `creatures/morphology.rs` | Implemented; coupled via emitter context |
 
 ### Cross-references (sound addendum)
 

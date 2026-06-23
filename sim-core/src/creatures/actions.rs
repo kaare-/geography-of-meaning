@@ -2,7 +2,10 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::math::Vec3i;
-use crate::world::{SoundEvent, World};
+use crate::world::{
+    age_adjusted_vocal_profile, emit_incidental_sound, sample_material_acoustics,
+    signature_with_age_band, ActionSoundKind, SoundEvent, World,
+};
 
 use super::creature::Creature;
 
@@ -62,6 +65,7 @@ pub fn choose_action<R: Rng + ?Sized>(
     rng: &mut R,
     sleeping: bool,
     heard_signature: Option<u64>,
+    heard_call_frequency: Option<f32>,
 ) -> Action {
     let push_dir = Vec3i::new(
         rng.gen_range(-1..=1),
@@ -134,6 +138,12 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature
                 .memory_graph
                 .trusted_follow_boost(creature.sensor.sound_calls, heard_signature);
+            weights[i].1 += creature.memory_graph.developmental_follow_boost(
+                creature.genome.developmental_bias,
+                creature.sensor.sound_calls,
+                heard_signature,
+                heard_call_frequency,
+            );
         }
     }
 
@@ -208,6 +218,21 @@ pub fn choose_action<R: Rng + ?Sized>(
 }
 
 pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) -> bool {
+    let emitter = creature.sound_emitter_context();
+    let material_pos = creature.position.floor_i();
+    let material = sample_material_acoustics(world, material_pos);
+
+    let emit = |world: &mut World, kind: ActionSoundKind, amp: f32| {
+        emit_incidental_sound(
+            world,
+            creature.position,
+            emitter,
+            kind,
+            amp,
+            material,
+        );
+    };
+
     match action {
         Action::Move(_) | Action::Push(_) | Action::Follow => false,
         Action::ConsumeOrganic => {
@@ -235,6 +260,9 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                 creature.regulatory.hydration =
                     (creature.regulatory.hydration + wet_trace * 0.04).min(1.0);
             }
+            if consumed {
+                emit(world, ActionSoundKind::ConsumeOrganic, 0.07);
+            }
             consumed
         }
         Action::Rest => {
@@ -250,11 +278,13 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
         }
         Action::EmitSound => {
             let energy_scale = (creature.regulatory.energy * 0.6 + 0.2).min(1.0);
+            let profile =
+                age_adjusted_vocal_profile(&creature.genome.vocal_profile, creature.age);
             world.emit_sound(SoundEvent::from_vocal_profile(
                 creature.position,
                 creature.id,
-                creature.signature,
-                &creature.genome.vocal_profile,
+                signature_with_age_band(creature.signature, creature.age),
+                &profile,
                 energy_scale,
             ));
             creature.regulatory.apply_action_cost(EMIT_SOUND_ENERGY_COST, 0.05);
@@ -279,6 +309,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                 }
 
                 creature.regulatory.apply_action_cost(DIG_ENERGY_COST, DIG_FATIGUE_COST);
+                emit(world, ActionSoundKind::Dig, 0.12);
                 true
             } else {
                 false
@@ -306,6 +337,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                                     CARRY_ENERGY_COST,
                                     CARRY_FATIGUE_COST,
                                 );
+                                emit(world, ActionSoundKind::Carry, 0.06);
                                 return true;
                             }
                         }
@@ -335,6 +367,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                                     DROP_ENERGY_COST,
                                     DROP_FATIGUE_COST,
                                 );
+                                emit(world, ActionSoundKind::Drop, 0.1);
                                 return true;
                             }
                         }
@@ -371,6 +404,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                                     PLACE_MATERIAL_ENERGY_COST,
                                     PLACE_MATERIAL_FATIGUE_COST,
                                 );
+                                emit(world, ActionSoundKind::PlaceMaterial, 0.09);
                                 return true;
                             }
                         }

@@ -8,7 +8,11 @@ pub mod voxel;
 pub mod water;
 
 pub use chunk::{Chunk, ChunkCoord};
-pub use sound::SoundEvent;
+pub use sound::{
+    emit_incidental_sound, sample_material_acoustics, signature_with_age_band,
+    age_adjusted_vocal_profile, ActionSoundKind, MaterialAcousticProfile, SoundEmitterContext,
+    SoundEvent,
+};
 
 use std::collections::{HashMap, HashSet};
 

@@ -1,6 +1,8 @@
 use crate::math::{Vec3f, Vec3i};
 use crate::world::physics::apply_trail_wear;
-use crate::world::World;
+use crate::world::{
+    emit_incidental_sound, sample_material_acoustics, ActionSoundKind, World,
+};
 
 use super::creature::Creature;
 
@@ -120,6 +122,16 @@ pub fn try_creature_move_at(
     if let Some(mut surface) = world.sample_voxel_mut(new_pos) {
         apply_trail_wear(&mut surface);
     }
+    let emitter = creatures[idx].sound_emitter_context();
+    let material = sample_material_acoustics(world, new_pos);
+    emit_incidental_sound(
+        world,
+        creatures[idx].position,
+        emitter,
+        ActionSoundKind::Move,
+        0.08,
+        material,
+    );
     true
 }
 
@@ -181,6 +193,17 @@ pub fn try_creature_push_at(
     if let Some(mut surface) = world.sample_voxel_mut(target_pos) {
         apply_trail_wear(&mut surface);
     }
+
+    let pusher_emitter = pusher.sound_emitter_context();
+    let material = sample_material_acoustics(world, target_pos);
+    emit_incidental_sound(
+        world,
+        pusher.position,
+        pusher_emitter,
+        ActionSoundKind::Push,
+        0.11,
+        material,
+    );
 
     Some(PushEvent {
         pusher_id,

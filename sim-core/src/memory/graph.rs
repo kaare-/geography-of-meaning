@@ -123,6 +123,30 @@ impl MemoryGraph {
         }
     }
 
+    /// Weak follow boost when high-pitch calls match signatures with positive memory history.
+    pub fn developmental_follow_boost(
+        &self,
+        bias: f32,
+        sound_calls: f32,
+        heard_signature: Option<u64>,
+        heard_call_frequency: Option<f32>,
+    ) -> f32 {
+        if bias < 0.01 || sound_calls < 0.08 {
+            return 0.0;
+        }
+        let Some(freq) = heard_call_frequency else {
+            return 0.0;
+        };
+        if freq < 0.55 {
+            return 0.0;
+        }
+        let Some(sig) = heard_signature else {
+            return 0.0;
+        };
+        let outcome = self.signature_mean_outcome(sig);
+        bias * sound_calls * (0.35 + outcome.max(0.0))
+    }
+
     pub fn node_summary(&self) -> MemoryNodeSummary {
         let mut summary = MemoryNodeSummary::default();
         for node in &self.nodes {

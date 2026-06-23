@@ -86,7 +86,7 @@ Mutation (genome), prediction error (memory), and environmental shock create nov
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| `Genome` + `mutate_from` | `creatures/genome.rs` | Three tunables with mutation |
+| `Genome` + `mutate_from` | `creatures/genome.rs` | Tunables including `developmental_bias` |
 | `signature` | `creatures/creature.rs` | Parent hash + RNG variation on birth |
 | Reproduction | `creatures/lifecycle.rs` | No memory graph copy |
 | Memory copy | — | Explicitly avoided |
@@ -126,13 +126,13 @@ Age modulates observable traces — what researchers label juvenile, adult, or e
 | Movement | Irregular, low-amplitude sound | Steady cadence | Slower, heavier footfalls |
 | Body size | Low mass morphology | Peak `mass` / carry | High mass, reduced speed |
 
-**Implemented:** `Creature::age` increments each tick. **Planned:** age-dependent scaling of `vocal_profile` emission, chemical trace strength, and incidental movement sound amplitude.
+**Implemented:** `Creature::age` increments each tick. Age-dependent scaling of `vocal_profile` emission (`age_adjusted_vocal_profile`), signature age bands (`signature_with_age_band`), and incidental movement sound amplitude via morphology coupling.
 
 ### Developmental Biases
 
 Genome carries **weak inherited biases** toward attending juvenile-like trace patterns — not predefined caregiving behaviors:
 
-- slightly elevated weight on high-pitch `sound_calls` in action scoring (planned)
+- slightly elevated weight on high-pitch `sound_calls` in action scoring via `developmental_follow_boost` (memory-mediated, not role-based)
 - no `caregiver` role enum — caregiving emerges when following/proximity repeatedly precedes positive regulatory outcomes for both parties
 
 Biases shape **which experiences are likely**, not which actions are mandated.
@@ -172,8 +172,11 @@ Older organisms may accumulate stronger prediction confidence for local trace→
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| `age` | `creatures/creature.rs` | Increments each tick |
-| Age-scaled `vocal_profile` | — | **Planned** |
+| `age` | `creatures/creature.rs`, `export/snapshots.rs` | Increments each tick; exported in snapshot |
+| Age-scaled `vocal_profile` | `world/sound.rs` | `age_adjusted_vocal_profile` on `EmitSound` |
+| `signature_with_age_band` | `world/sound.rs` | Subtle age-band mixing into emitter signature |
+| `Genome::developmental_bias` | `genome.rs` | Mutated on reproduction; weak juvenile-signature bias |
+| `developmental_follow_boost` | `memory/graph.rs` | Memory-mediated follow weight (not caregiving opcode) |
 | `Genome::mutate_from` + reproduction | `genome.rs`, `lifecycle.rs` | Weak bias inheritance (partial) |
 | `signature` | `creature.rs` | Per-individual; no family struct |
 | `Action::Follow` | `actions.rs`, `spatial.rs` | Social proximity inheritance |
