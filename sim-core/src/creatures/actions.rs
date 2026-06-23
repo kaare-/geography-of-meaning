@@ -80,6 +80,7 @@ pub fn choose_action<R: Rng + ?Sized>(
     sleeping: bool,
     heard_signature: Option<u64>,
     heard_call_frequency: Option<f32>,
+    prediction_ms: Option<&mut f64>,
 ) -> Action {
     let push_dir = Vec3i::new(
         rng.gen_range(-1..=1),
@@ -220,11 +221,15 @@ pub fn choose_action<R: Rng + ?Sized>(
     }
 
     if !sleeping && rng.gen::<f32>() >= effective_exploration_rate(creature) {
+        let prediction_start = std::time::Instant::now();
         let predictions = creature.memory_graph.predict_action_outcomes(
             creature.sensor,
             &creature.active_concepts,
             &creature.concepts,
         );
+        if let Some(ms) = prediction_ms {
+            *ms += prediction_start.elapsed().as_secs_f64() * 1000.0;
+        }
         for (action, weight) in &mut weights {
             let predicted = match action {
                 Action::Move(_) => predictions.move_delta,

@@ -33,6 +33,8 @@ pub struct SimulationConfig {
     pub progress_every: u64,
     /// When set, append the same progress lines to this file (parent dirs created).
     pub progress_log: Option<PathBuf>,
+    /// When set, append per-window timing CSV rows (header written once).
+    pub timing_log: Option<PathBuf>,
     /// Ticks per simulated day (diurnal phase); mirrored from `world::TICKS_PER_DAY`.
     pub ticks_per_day: u64,
 }
@@ -52,6 +54,7 @@ impl Default for SimulationConfig {
             dream_noise: false,
             progress_every: 0,
             progress_log: None,
+            timing_log: None,
             ticks_per_day: TICKS_PER_DAY,
         }
     }

@@ -33,6 +33,10 @@ struct Args {
     /// Append progress lines to this file (same format as stdout).
     #[arg(long)]
     progress_log: Option<std::path::PathBuf>,
+
+    /// Append per-window timing CSV rows (header written once).
+    #[arg(long)]
+    timing_log: Option<std::path::PathBuf>,
 }
 
 fn main() {
@@ -47,6 +51,7 @@ fn main() {
         snapshot_interval: args.snapshot_interval,
         progress_every: args.progress_every,
         progress_log: args.progress_log,
+        timing_log: args.timing_log,
         ..SimulationConfig::default()
     };
 
@@ -57,6 +62,7 @@ fn main() {
     for _ in 0..config.ticks {
         sim.tick();
         if snapshot_interval > 0 && sim.world.time % snapshot_interval == 0 {
+            let snapshot_start = std::time::Instant::now();
             let path = output_dir.join(format!("snapshots/world_tick_{}.json", sim.world.time));
             if let Err(e) = write_snapshot(&sim, &path) {
                 eprintln!("Interval snapshot failed: {e}");
@@ -66,12 +72,18 @@ fn main() {
                 eprintln!("Interval memory export failed: {e}");
                 std::process::exit(1);
             }
+            sim.record_snapshot_ms(snapshot_start.elapsed().as_secs_f64() * 1000.0);
         }
     }
 
+    let export_start = std::time::Instant::now();
     if let Err(e) = export_all(&sim, &output_dir) {
         eprintln!("Export failed: {e}");
         std::process::exit(1);
+    }
+    sim.record_export_ms(export_start.elapsed().as_secs_f64() * 1000.0);
+    if let Err(e) = sim.flush_timing_report() {
+        eprintln!("Final timing report failed: {e}");
     }
 
     let snapshot_path = output_dir.join("snapshots/world_final.json");
