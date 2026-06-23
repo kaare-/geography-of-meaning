@@ -144,7 +144,7 @@ Knowledge transfers through **interaction geometry**, not graph duplication:
 | Mechanism | Substrate | Status |
 |-----------|-----------|--------|
 | Following | `Action::Follow` toward salient creature/sound traces | Implemented |
-| Proximity organic transfer | `Action::TransferOrganic` — adjacent low-energy neighbor | Implemented (stub) |
+| Proximity organic transfer | `Action::TransferOrganic` — adjacent low-energy neighbor | Implemented |
 | Shared foraging | Proximity → overlapping sensor experiences | Emergent |
 | Call imitation | Listener memory edges from heard `SoundEvent`s | Partial |
 | Trust-weighted follow | `trusted_follow_boost` per `signature` | Implemented |
@@ -181,7 +181,7 @@ Older organisms may accumulate stronger prediction confidence for local trace→
 | `Genome::mutate_from` + reproduction | `genome.rs`, `lifecycle.rs` | Weak bias inheritance (partial) |
 | `signature` | `creature.rs` | Per-individual; no family struct |
 | `Action::Follow` | `actions.rs`, `spatial.rs` | Social proximity inheritance |
-| `Action::TransferOrganic` | `actions.rs`, `spatial.rs`, `engine.rs` | Adjacent transfer when actor `carried_mass` high and neighbor energy low; energy/hydration cost to actor — no sharing label |
+| `Action::TransferOrganic` | `actions.rs`, `spatial.rs`, `engine.rs` | Adjacent transfer when actor `carried_mass` ≥ 0.12 and neighbor energy ≤ 0.45; selection boost when nearby creature trace + carried load; `transfer_count` in tick log |
 | `trusted_follow_boost` | `memory/graph.rs` | Social prediction link |
 | Memory graph copy on birth | — | Explicitly avoided |
 

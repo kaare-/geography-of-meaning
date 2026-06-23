@@ -58,6 +58,7 @@ pub struct TickLogEntry {
     pub deaths: Vec<DeathEvent>,
     pub births: Vec<BirthEvent>,
     pub concepts_formed: u32,
+    pub transfer_count: u32,
     pub action_counts: ActionCounts,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub push_events: Vec<PushEvent>,

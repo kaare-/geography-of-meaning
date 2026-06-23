@@ -72,6 +72,7 @@ fn main() {
         .filter(|c| c.sleeping)
         .count();
     let total_sounds: usize = sim.tick_logs.iter().map(|e| e.sound_event_count).sum();
+    let total_transfers: u32 = sim.tick_logs.iter().map(|e| e.transfer_count).sum();
     let concept_total: usize = sim.creatures.iter().map(|c| c.concepts.len()).sum();
     let sample_creature = sim.creatures.iter().min_by_key(|c| c.id);
     let memory_path = sample_creature.map(|c| {
@@ -94,6 +95,7 @@ fn main() {
     println!("  Deaths:        {total_deaths}");
     println!("  Sleep events:  {sleep_events} creature-ticks");
     println!("  Sound events:  {total_sounds} (sum per-tick counts)");
+    println!("  Transfers:     {total_transfers} organic proximity transfers");
     println!("  Concepts:      {concept_total} total across population");
     println!("  Chunks:        {}", sim.world.chunks.len());
     println!("  Snapshot:      {}", snapshot_path.display());

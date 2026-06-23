@@ -342,6 +342,7 @@ impl Simulation {
             deaths,
             births,
             concepts_formed,
+            transfer_count: action_counts.transfer_organic_count,
             action_counts,
             push_events,
             creatures: self

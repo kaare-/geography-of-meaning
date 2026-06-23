@@ -13,6 +13,8 @@ const SIMILARITY_THRESHOLD: f32 = 0.85;
 const CONCEPT_CLUSTER_THRESHOLD: f32 = 0.70;
 const MIN_CONCEPT_CLUSTER_SIZE: usize = 2;
 const SPREAD_DECAY: f32 = 0.5;
+const SPREAD_DECAY_HOP2: f32 = 0.25;
+const CO_OCCURS_SPREAD_WEIGHT: f32 = 0.35;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ActionPredictions {
@@ -240,24 +242,43 @@ impl MemoryGraph {
             }
         }
 
-        let seeds: Vec<(NodeId, f32)> = activation.iter().map(|(&k, &v)| (k, v)).collect();
-        for (source, act) in seeds {
-            let hop = act * SPREAD_DECAY;
-            for edge in &self.edges {
-                if edge.source_id != source {
-                    continue;
-                }
-                match edge.edge_type {
-                    EdgeType::Precedes | EdgeType::ConceptCompresses => {
-                        *activation.entry(edge.target_id).or_insert(0.0) +=
-                            hop * edge.strength.max(0.1);
-                    }
-                    _ => {}
-                }
-            }
+        let hop1 = Self::spread_hop(&self.edges, &activation, SPREAD_DECAY);
+        for (&node, &act) in &hop1 {
+            *activation.entry(node).or_insert(0.0) += act;
+        }
+
+        let hop2 = Self::spread_hop(&self.edges, &hop1, SPREAD_DECAY_HOP2);
+        for (node, act) in hop2 {
+            *activation.entry(node).or_insert(0.0) += act;
         }
 
         activation
+    }
+
+    fn spread_hop(
+        edges: &[MemoryEdge],
+        sources: &HashMap<NodeId, f32>,
+        decay: f32,
+    ) -> HashMap<NodeId, f32> {
+        let mut hop_activation: HashMap<NodeId, f32> = HashMap::new();
+        for (&source, &act) in sources {
+            let hop = act * decay;
+            if hop < 1e-6 {
+                continue;
+            }
+            for edge in edges {
+                if edge.source_id != source {
+                    continue;
+                }
+                let edge_weight = match edge.edge_type {
+                    EdgeType::Precedes | EdgeType::ConceptCompresses => edge.strength.max(0.1),
+                    EdgeType::CoOccurs => edge.strength.max(0.1) * CO_OCCURS_SPREAD_WEIGHT,
+                    _ => continue,
+                };
+                *hop_activation.entry(edge.target_id).or_insert(0.0) += hop * edge_weight;
+            }
+        }
+        hop_activation
     }
 
     pub fn predict_regulatory_delta(

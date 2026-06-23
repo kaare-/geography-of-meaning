@@ -17,6 +17,10 @@ const GROUNDWATER_MAX_VOID: f32 = 0.45;
 const SEDIMENT_TRANSFER_RATE: f32 = 0.018;
 const FLOW_EROSION_RATE: f32 = 0.035;
 const DEPOSITION_WATER_THRESHOLD: f32 = 0.1;
+const EROSION_PERMEABILITY_BUMP: f32 = 0.015;
+const CAVE_PERMEABILITY_THRESHOLD: f32 = 0.38;
+const CAVE_WATER_CONTENT_MIN: f32 = 0.35;
+const CAVE_VOID_BUMP: f32 = 0.0006;
 
 pub fn apply_rain(chunk: &mut Chunk, amount: f32) {
     for z in (0..CHUNK_SIZE).rev() {
@@ -193,6 +197,7 @@ pub fn flow_groundwater(chunk: &mut Chunk) {
     }
 
     deposit_sediment_on_slow_flow(chunk, &transfers);
+    apply_cave_seed_feedback(chunk);
 }
 
 fn apply_flow_sediment_and_erosion(chunk: &mut Chunk, from: usize, to: usize, flow: f32) {
@@ -207,9 +212,35 @@ fn apply_flow_sediment_and_erosion(chunk: &mut Chunk, from: usize, to: usize, fl
     chunk.fields.clay[to] = (chunk.fields.clay[to] + clay_move).min(1.0);
 
     let erosion = flow * FLOW_EROSION_RATE;
-    chunk.fields.erosion_damage[from] = (chunk.fields.erosion_damage[from] + erosion).min(1.0);
-    chunk.fields.erosion_damage[to] =
-        (chunk.fields.erosion_damage[to] + erosion * 0.35).min(1.0);
+    let from_before = chunk.fields.erosion_damage[from];
+    let to_before = chunk.fields.erosion_damage[to];
+    chunk.fields.erosion_damage[from] = (from_before + erosion).min(1.0);
+    chunk.fields.erosion_damage[to] = (to_before + erosion * 0.35).min(1.0);
+    if chunk.fields.erosion_damage[from] > from_before {
+        chunk.fields.permeability[from] =
+            (chunk.fields.permeability[from] + erosion * EROSION_PERMEABILITY_BUMP).min(1.0);
+    }
+    if chunk.fields.erosion_damage[to] > to_before {
+        chunk.fields.permeability[to] =
+            (chunk.fields.permeability[to] + erosion * 0.35 * EROSION_PERMEABILITY_BUMP).min(1.0);
+    }
+}
+
+/// Placeholder cave seed: high permeability + wet voxels slowly gain void.
+fn apply_cave_seed_feedback(chunk: &mut Chunk) {
+    for i in 0..CHUNK_VOLUME {
+        if chunk.fields.permeability[i] < CAVE_PERMEABILITY_THRESHOLD {
+            continue;
+        }
+        if chunk.fields.water_content[i] < CAVE_WATER_CONTENT_MIN {
+            continue;
+        }
+        if chunk.fields.void_fraction[i] >= GROUNDWATER_MAX_VOID {
+            continue;
+        }
+        chunk.fields.void_fraction[i] =
+            (chunk.fields.void_fraction[i] + CAVE_VOID_BUMP).min(GROUNDWATER_MAX_VOID);
+    }
 }
 
 /// When inflow exceeds outflow, suspended sediment settles as coarse mineral and clay.

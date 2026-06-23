@@ -71,8 +71,8 @@ pub const TRANSFER_ORGANIC_ENERGY_COST: f32 = 0.05;
 pub const TRANSFER_ORGANIC_HYDRATION_COST: f32 = 0.03;
 pub const TRANSFER_ORGANIC_FATIGUE_COST: f32 = 0.06;
 const TRANSFER_ORGANIC_AMOUNT: f32 = 0.04;
-const TRANSFER_ACTOR_CARRIED_MIN: f32 = 0.18;
-const TRANSFER_NEIGHBOR_ENERGY_MAX: f32 = 0.38;
+const TRANSFER_ACTOR_CARRIED_MIN: f32 = 0.12;
+const TRANSFER_NEIGHBOR_ENERGY_MAX: f32 = 0.45;
 
 /// Step direction toward the adjacent neighbor with strongest creature-trace gradient.
 pub fn compute_follow_direction(creature: &Creature, others: &[Creature]) -> Option<Vec3i> {

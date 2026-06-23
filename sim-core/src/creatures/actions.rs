@@ -182,10 +182,10 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature.sensor.chemical_binder + 0.3;
         }
     }
-    if creature.regulatory.carried_mass > 0.2 && creature.sensor.chemical_creature > 0.05 {
+    if creature.regulatory.carried_mass > 0.1 && creature.sensor.chemical_creature > 0.05 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::TransferOrganic)) {
-            weights[i].1 += creature.regulatory.carried_mass
-                + creature.sensor.chemical_creature * 0.8;
+            weights[i].1 += creature.regulatory.carried_mass * 0.5
+                + creature.sensor.chemical_creature * 1.0;
         }
     }
 

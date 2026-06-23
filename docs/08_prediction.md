@@ -24,6 +24,6 @@ Prediction traverses directed memory edges to estimate future sensory and regula
 |-----------|----------|
 | `predict_regulatory_delta` | `memory/graph.rs` — sensory match + spread activation weights |
 | `predict_action_outcomes` | `memory/graph.rs` — per-action deltas; sound-activated paths weighted by edge confidence and signature outcome boost |
-| `spread_activation` | `memory/graph.rs` — 1-hop along `concept_compresses` / `precedes`, decay 0.5 |
+| `spread_activation` | `memory/graph.rs` — 2-hop along `concept_compresses` / `precedes` (decay 0.5, 0.25); `CoOccurs` at reduced weight |
 | Action bias in `choose_action` | `creatures/actions.rs` (15% exploration retained) |
 | `Experience.outcome` | `creature.rs` — scalar regulatory delta |
