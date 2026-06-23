@@ -163,6 +163,7 @@ impl Creature {
                 self.concepts.push(concept);
             }
         }
+        self.memory_graph.sync_concept_members(&mut self.concepts);
         timing.concept_creation_ms = concept_creation_start.elapsed().as_secs_f64() * 1000.0;
         if at_wake {
             self.sleep.sleeping = false;
