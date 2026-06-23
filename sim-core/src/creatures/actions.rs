@@ -65,12 +65,7 @@ const TRANSFER_ORGANIC_BASE_WEIGHT: f32 = 0.12;
 
 const UNCERTAINTY_EXPLORATION_BOOST: f32 = 0.12;
 
-fn effective_exploration_rate(creature: &Creature) -> f32 {
-    let uncertainty = creature.memory_graph.prediction_uncertainty(
-        creature.sensor,
-        &creature.active_concepts,
-        &creature.concepts,
-    );
+fn effective_exploration_rate(uncertainty: f32) -> f32 {
     (EXPLORATION_RATE + uncertainty * UNCERTAINTY_EXPLORATION_BOOST).clamp(0.05, 0.45)
 }
 
@@ -202,12 +197,15 @@ pub fn choose_action<R: Rng + ?Sized>(
     }
 
     if !sleeping {
-        let novelty = creature.memory_graph.novelty_score(creature.sensor);
-        let uncertainty = creature.memory_graph.prediction_uncertainty(
-            creature.sensor,
+        let spread = creature.memory_graph.spread_activation(
             &creature.active_concepts,
             &creature.concepts,
         );
+        let uncertainty = creature.memory_graph.prediction_uncertainty_with_spread(
+            creature.sensor,
+            &spread,
+        );
+        let novelty = creature.memory_graph.novelty_score(creature.sensor);
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Move(_))) {
             weights[i].1 += novelty * 1.5;
             weights[i].1 *= 1.0 / creature.genome.move_speed.max(0.5);
@@ -218,37 +216,36 @@ pub fn choose_action<R: Rng + ?Sized>(
                 *weight += explore_boost;
             }
         }
-    }
 
-    if !sleeping && rng.gen::<f32>() >= effective_exploration_rate(creature) {
-        let prediction_start = std::time::Instant::now();
-        let predictions = creature.memory_graph.predict_action_outcomes(
-            creature.sensor,
-            &creature.active_concepts,
-            &creature.concepts,
-        );
-        if let Some(ms) = prediction_ms {
-            *ms += prediction_start.elapsed().as_secs_f64() * 1000.0;
-        }
-        for (action, weight) in &mut weights {
-            let predicted = match action {
-                Action::Move(_) => predictions.move_delta,
-                Action::Push(_) => predictions.push_delta,
-                Action::ConsumeOrganic => predictions.consume_delta,
-                Action::Rest => predictions.rest_delta,
-                Action::EmitSound => predictions.emit_sound_delta,
-                Action::Follow => predictions.follow_delta,
-                Action::Dig => predictions.dig_delta,
-                Action::Carry => predictions.carry_delta,
-                Action::Drop => predictions.drop_delta,
-                Action::PlaceMaterial => predictions.place_material_delta,
-                Action::ApplyBinder => predictions.apply_binder_delta,
-                Action::TransferOrganic => predictions.transfer_organic_delta,
-            };
-            if predicted > 0.0 {
-                *weight += predicted * PREDICTION_WEIGHT;
-            } else if predicted < 0.0 {
-                *weight = (*weight + predicted * PREDICTION_WEIGHT).max(0.1);
+        if rng.gen::<f32>() >= effective_exploration_rate(uncertainty) {
+            let prediction_start = std::time::Instant::now();
+            let predictions = creature.memory_graph.predict_action_outcomes_with_spread(
+                creature.sensor,
+                &spread,
+            );
+            if let Some(ms) = prediction_ms {
+                *ms += prediction_start.elapsed().as_secs_f64() * 1000.0;
+            }
+            for (action, weight) in &mut weights {
+                let predicted = match action {
+                    Action::Move(_) => predictions.move_delta,
+                    Action::Push(_) => predictions.push_delta,
+                    Action::ConsumeOrganic => predictions.consume_delta,
+                    Action::Rest => predictions.rest_delta,
+                    Action::EmitSound => predictions.emit_sound_delta,
+                    Action::Follow => predictions.follow_delta,
+                    Action::Dig => predictions.dig_delta,
+                    Action::Carry => predictions.carry_delta,
+                    Action::Drop => predictions.drop_delta,
+                    Action::PlaceMaterial => predictions.place_material_delta,
+                    Action::ApplyBinder => predictions.apply_binder_delta,
+                    Action::TransferOrganic => predictions.transfer_organic_delta,
+                };
+                if predicted > 0.0 {
+                    *weight += predicted * PREDICTION_WEIGHT;
+                } else if predicted < 0.0 {
+                    *weight = (*weight + predicted * PREDICTION_WEIGHT).max(0.1);
+                }
             }
         }
     }
