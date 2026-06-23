@@ -1,7 +1,5 @@
-use std::path::PathBuf;
-
 use clap::Parser;
-use sim_core::export::{export_all, write_snapshot};
+use sim_core::export::{export_all, resolve_output_dir, write_snapshot};
 use sim_core::simulation::{Simulation, SimulationConfig};
 
 #[derive(Parser, Debug)]
@@ -36,7 +34,7 @@ fn main() {
         seed: args.seed,
         world_chunks: args.world_size,
         creature_count: args.creatures,
-        output_dir: PathBuf::from(&args.output),
+        output_dir: resolve_output_dir(&args.output),
         snapshot_interval: args.snapshot_interval,
         ..SimulationConfig::default()
     };
@@ -63,6 +61,7 @@ fn main() {
 
     let snapshot_path = output_dir.join("snapshots/world_final.json");
     let log_path = output_dir.join("logs/tick_log.jsonl");
+    let narrative_path = output_dir.join("logs/narrative_summary.json");
 
     let total_births: usize = sim.tick_logs.iter().map(|e| e.births.len()).sum();
     let total_deaths: usize = sim.tick_logs.iter().map(|e| e.deaths.len()).sum();
@@ -103,6 +102,7 @@ fn main() {
         println!("  Interval snaps:{interval_count} (every {snapshot_interval} ticks)");
     }
     println!("  Log:           {}", log_path.display());
+    println!("  Narrative:     {}", narrative_path.display());
     if let Some(mem) = memory_path {
         println!("  Memory export: {mem}");
     }

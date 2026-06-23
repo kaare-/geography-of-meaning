@@ -4,7 +4,7 @@
 
 ## Status
 
-**Partial** — `Creature` struct, regulatory state, genome, three actions, sensor integration, experience buffer, and memory graph wiring are implemented. Full lifecycle, reproduction, death, extended action space, and cognition cost are planned.
+**Partial** — `Creature` struct, regulatory state, genome, morphology, three actions, sensor integration, experience buffer, and memory graph wiring are implemented. Full lifecycle, reproduction, death, extended action space, and cognition cost are planned.
 
 ## Summary
 
@@ -39,6 +39,7 @@ Implemented in `sim-core/src/creatures/creature.rs` as `Creature`:
 |-------|--------|------|
 | `id`, `position`, `signature`, `age` | `creature.rs` | Identity and physical presence |
 | `genome` | `genome.rs` | Heritable tunables |
+| `morphology` | `morphology.rs` | Body mass, reserves, thermal inertia, carry capacity |
 | `regulatory` | `regulation.rs` | Internal homeostasis |
 | `sensor` | `sensors.rs` | Current sensor traces |
 | `recent_experience` | `creature.rs` | Rolling buffer (max 64) |
@@ -116,16 +117,16 @@ Larger bodies buffer fluctuation; smaller bodies sample more of the world per un
 
 ### Body Mass
 
-**Planned:** explicit `body_mass` field in `Genome` / `Creature`. Skeleton uses implicit defaults via metabolism and action costs only; `carried_mass` in `RegulatoryState` is separate from structural body mass.
+**Implemented** — `Morphology::mass` derived from `Genome::mass_bias` in `morphology.rs`. Scales passive metabolism (`metabolism_multiplier`), thermal coupling, push strength, and energy ceiling (`reserve_capacity`).
 
 | Scale | Regulatory implication |
 |-------|------------------------|
-| Higher mass | Slower energy turnover, higher baseline metabolism (planned) |
-| Lower mass | Faster drain, finer gradient sampling (planned) |
+| Higher mass | Higher passive metabolism multiplier; slower thermal coupling |
+| Lower mass | Lower drain; faster thermal equilibration with environment |
 
 ### Large Morphologies
 
-**Advantages (planned coupling):**
+**Advantages (implemented coupling):**
 
 - Thermal inertia — slower temperature_stress swings
 - Contact dominance — higher `contact_hard` / `contact_soft` in conflicts
@@ -141,7 +142,7 @@ Larger bodies buffer fluctuation; smaller bodies sample more of the world per un
 
 **Advantages:**
 
-- Lower metabolism per tick (planned mass scaling)
+- Lower metabolism per tick (mass-scaled drain in `regulation.rs`)
 - Finer chemical/thermal gradients in neighborhood
 - Faster movement through void-rich voxels
 
@@ -161,7 +162,7 @@ When organisms occupy adjacent voxels, contact channels and mass (planned) deter
 
 ### Carrying Capacity
 
-`carried_mass` in `regulation.rs` exists; carry/drop actions are **planned** ([12_construction_and_infrastructure.md](12_construction_and_infrastructure.md)). Effective capacity will scale with body mass and genome.
+`carried_mass` in `RegulatoryState`; carry/drop actions in `actions.rs`. Effective capacity is `Morphology::carry_capacity` (scales with mass and `Genome::carry_bias`).
 
 ### Ecological Niches
 
@@ -213,7 +214,7 @@ Morphology is not cosmetic. It determines metabolism, thermal coupling, conflict
 
 ### Body Mass
 
-**Planned** — explicit `body_mass` field in `Genome` or `Creature`. Skeleton uses implicit defaults via metabolism and action costs only.
+**Implemented** — `Morphology::mass` on `Creature`, derived from genome at spawn and mutated on reproduction.
 
 | Scale | Regulatory implication |
 |-------|------------------------|
@@ -222,15 +223,15 @@ Morphology is not cosmetic. It determines metabolism, thermal coupling, conflict
 
 ### Large Morphologies
 
-**Advantages (planned):** greater `carried_mass` capacity, push dominance, thermal inertia in cold traces, structural interaction with collapse.
+**Advantages:** greater `carry_capacity`, push dominance via `push_strength()`, thermal inertia in cold traces, structural interaction with collapse.
 
-**Disadvantages (planned):** higher baseline metabolism, slower movement, larger sensor contact profile, harder to find void-rich paths.
+**Disadvantages:** higher baseline metabolism multiplier, slower movement, larger sensor contact profile, harder to find void-rich paths.
 
 ### Small Morphologies
 
-**Advantages (planned):** lower metabolism, access to narrow voids, faster fatigue recovery relative to mass.
+**Advantages:** lower metabolism multiplier, access to narrow voids, faster fatigue recovery relative to mass.
 
-**Disadvantages (planned):** push vulnerability, rapid thermal stress from environment, limited carry capacity.
+**Disadvantages:** push vulnerability, rapid thermal stress from environment, limited carry capacity.
 
 ### Thermal Consequences
 
@@ -242,7 +243,7 @@ Mass modulates push outcomes and integrity damage ([11_social_systems.md](11_soc
 
 ### Carrying Capacity
 
-`carried_mass` in `RegulatoryState` — skeleton field without pickup logic. Future: capacity scales with morphology and affects movement cost.
+`carried_mass` in `RegulatoryState`; pickup/drop in `actions.rs`. Capacity is `Morphology::carry_capacity`.
 
 ### Ecological Niches
 
@@ -252,7 +253,7 @@ Researchers may describe emergent roles — **explorers**, **builders**, **aggre
 
 > Form predicts which futures are cheap. Evolution (planned) selects forms that compress regulatory surprise.
 
-**Current implementation:** `carried_mass` in `regulation.rs`; genome tunables in `genome.rs`. Explicit `body_mass` — **planned**.
+**Current implementation:** `morphology.rs` (`Morphology` struct), genome biases in `genome.rs`, metabolism/thermal/push/carry integration in `regulation.rs`, `spatial.rs`, and `actions.rs`. Exported in `CreatureSnapshot`.
 
 ## Cross-references
 
@@ -271,8 +272,9 @@ Researchers may describe emergent roles — **explorers**, **builders**, **aggre
 | Module | Role |
 |--------|------|
 | `creature.rs` | `Creature`, `Experience`, experience buffer |
-| `genome.rs` | `Genome` defaults |
-| `regulation.rs` | Passive drain, action costs, clamping |
+| `genome.rs` | `Genome` defaults and mutation |
+| `morphology.rs` | `Morphology` from genome; reproduction mutation |
+| `regulation.rs` | Passive drain (mass-scaled), environmental stress (thermal coupling), action costs, clamping |
 | `actions.rs` | `Action` enum (move, rest, consume, sound, dig, carry, drop), `choose_action`, `apply_action` |
 | `sensors.rs` | `read_sensors` (see 04) |
 

@@ -9,9 +9,9 @@ const PUSH_FATIGUE_COST: f32 = 0.12;
 const PUSHED_ENERGY_COST: f32 = 0.04;
 const PUSHED_FATIGUE_COST: f32 = 0.08;
 
-/// Morphology proxy for displacement contests: genome move speed plus carried mass.
+/// Displacement strength from morphology mass plus carried load.
 pub fn push_strength(creature: &Creature) -> f32 {
-    creature.genome.move_speed + creature.regulatory.carried_mass * 0.6
+    creature.morphology.push_strength() + creature.regulatory.carried_mass * 0.6
 }
 
 pub fn creature_at_position(creatures: &[Creature], pos: Vec3i, exclude_id: u64) -> Option<usize> {

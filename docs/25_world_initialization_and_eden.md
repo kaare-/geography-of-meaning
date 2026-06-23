@@ -69,7 +69,7 @@ Initial individuals should vary slightly in:
 
 Variation provides material for future evolution.
 
-**Skeleton:** CLI `--creatures` (default 5) sets `SimulationConfig::creature_count`. Each creature receives a random `signature` via `rng.gen::<u64>()` but shares the same default `Genome` from `Creature::new` — morphology and sensitivity variation across individuals is **planned** ([03_creatures.md](03_creatures.md), [13_inheritance.md](13_inheritance.md)).
+**Skeleton:** CLI `--creatures` (default 5) sets `SimulationConfig::creature_count`. Each creature receives a random `signature` and varied `Genome` / `Morphology` at spawn (`engine.rs::random_spawn_genome`) — morphology and sensitivity variation across individuals is **partial** ([03_creatures.md](03_creatures.md), [13_inheritance.md](13_inheritance.md)).
 
 If fewer spawn positions are found than requested, remaining creatures are placed at the first spawn position (fallback at `(8, 8, 4)` if none found).
 

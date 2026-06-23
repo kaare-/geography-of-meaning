@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::chunk::Chunk;
 use super::voxel::{idx, CHUNK_SIZE, CHUNK_VOLUME};
 
@@ -12,6 +14,9 @@ const GROUNDWATER_MIN_CONTENT: f32 = 0.15;
 const GROUNDWATER_FLOW_RATE: f32 = 0.02;
 const GROUNDWATER_MAX_TRANSFER: f32 = 0.02;
 const GROUNDWATER_MAX_VOID: f32 = 0.45;
+const SEDIMENT_TRANSFER_RATE: f32 = 0.018;
+const FLOW_EROSION_RATE: f32 = 0.035;
+const DEPOSITION_WATER_THRESHOLD: f32 = 0.1;
 
 pub fn apply_rain(chunk: &mut Chunk, amount: f32) {
     for z in (0..CHUNK_SIZE).rev() {
@@ -61,10 +66,17 @@ pub fn flow_surface_water(chunk: &mut Chunk) {
         }
     }
 
-    for (from, to, amount) in transfers {
-        chunk.fields.surface_water[from] = (chunk.fields.surface_water[from] - amount).max(0.0);
-        chunk.fields.surface_water[to] += amount;
+    for (from, to, amount) in &transfers {
+        apply_flow_sediment_and_erosion(chunk, *from, *to, *amount);
     }
+
+    for (from, to, amount) in &transfers {
+        chunk.fields.surface_water[*from] =
+            (chunk.fields.surface_water[*from] - amount).max(0.0);
+        chunk.fields.surface_water[*to] += amount;
+    }
+
+    deposit_sediment_on_slow_flow(chunk, &transfers);
 }
 
 pub fn infiltrate(chunk: &mut Chunk) {
@@ -170,10 +182,59 @@ pub fn flow_groundwater(chunk: &mut Chunk) {
         }
     }
 
+    for (from, to, amount) in &transfers {
+        apply_flow_sediment_and_erosion(chunk, *from, *to, *amount);
+    }
+
+    for (from, to, amount) in &transfers {
+        chunk.fields.water_content[*from] =
+            (chunk.fields.water_content[*from] - amount).max(0.0);
+        chunk.fields.water_content[*to] += amount;
+    }
+
+    deposit_sediment_on_slow_flow(chunk, &transfers);
+}
+
+fn apply_flow_sediment_and_erosion(chunk: &mut Chunk, from: usize, to: usize, flow: f32) {
+    if flow <= 0.0 {
+        return;
+    }
+    let organic_move = (chunk.fields.organic[from] * flow * SEDIMENT_TRANSFER_RATE).min(0.004);
+    let clay_move = (chunk.fields.clay[from] * flow * SEDIMENT_TRANSFER_RATE).min(0.004);
+    chunk.fields.organic[from] = (chunk.fields.organic[from] - organic_move).max(0.0);
+    chunk.fields.clay[from] = (chunk.fields.clay[from] - clay_move).max(0.0);
+    chunk.fields.organic[to] = (chunk.fields.organic[to] + organic_move).min(1.0);
+    chunk.fields.clay[to] = (chunk.fields.clay[to] + clay_move).min(1.0);
+
+    let erosion = flow * FLOW_EROSION_RATE;
+    chunk.fields.erosion_damage[from] = (chunk.fields.erosion_damage[from] + erosion).min(1.0);
+    chunk.fields.erosion_damage[to] =
+        (chunk.fields.erosion_damage[to] + erosion * 0.35).min(1.0);
+}
+
+/// When inflow exceeds outflow, suspended sediment settles as coarse mineral and clay.
+fn deposit_sediment_on_slow_flow(chunk: &mut Chunk, transfers: &[(usize, usize, f32)]) {
+    let mut outflow: HashMap<usize, f32> = HashMap::new();
+    let mut inflow: HashMap<usize, f32> = HashMap::new();
     for (from, to, amount) in transfers {
-        chunk.fields.water_content[from] =
-            (chunk.fields.water_content[from] - amount).max(0.0);
-        chunk.fields.water_content[to] += amount;
+        *outflow.entry(*from).or_default() += amount;
+        *inflow.entry(*to).or_default() += amount;
+    }
+
+    for i in 0..CHUNK_VOLUME {
+        let water = chunk.fields.surface_water[i].max(chunk.fields.water_content[i]);
+        if water < DEPOSITION_WATER_THRESHOLD {
+            continue;
+        }
+        let out = outflow.get(&i).copied().unwrap_or(0.0);
+        let inp = inflow.get(&i).copied().unwrap_or(0.0);
+        if inp <= out {
+            continue;
+        }
+        let settle = ((inp - out) * 0.01).min(0.006);
+        chunk.fields.coarse_mineral[i] =
+            (chunk.fields.coarse_mineral[i] + settle * 0.55).min(1.0);
+        chunk.fields.clay[i] = (chunk.fields.clay[i] + settle * 0.45).min(1.0);
     }
 }
 

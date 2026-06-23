@@ -5,6 +5,7 @@ use crate::memory::{activate_concepts, ActiveConcept, ConceptNode, ConceptNodeId
 
 use super::actions::Action;
 use super::genome::Genome;
+use super::morphology::Morphology;
 use super::regulation::RegulatoryState;
 use super::sensors::SensorState;
 
@@ -45,6 +46,7 @@ pub struct Creature {
     pub id: u64,
     pub position: Vec3f,
     pub genome: Genome,
+    pub morphology: Morphology,
     pub regulatory: RegulatoryState,
     pub sensor: SensorState,
     pub recent_experience: Vec<Experience>,
@@ -60,10 +62,13 @@ pub struct Creature {
 
 impl Creature {
     pub fn new(id: u64, position: Vec3f, signature: u64) -> Self {
+        let genome = Genome::default();
+        let morphology = Morphology::from_genome(&genome);
         Self {
             id,
             position,
-            genome: Genome::default(),
+            genome,
+            morphology,
             regulatory: RegulatoryState::default(),
             sensor: SensorState::default(),
             recent_experience: Vec::new(),

@@ -4,7 +4,7 @@
 
 ## Status
 
-**Partial** — JSON snapshot export, per-tick JSONL logs, and a Python loader/summary script are implemented. Dedicated viewers, GraphML export, historical timelines, narrative extraction, and real-time inspection are **planned**. See [17_analysis_and_visualization.md](17_analysis_and_visualization.md), [19_data_model.md](19_data_model.md).
+**Partial** — JSON snapshot export, per-tick JSONL logs, tick-log narrative summary, and a Python loader/summary script are implemented. Dedicated viewers, GraphML export, historical timelines, full narrative extraction, and real-time inspection are **planned**. See [17_analysis_and_visualization.md](17_analysis_and_visualization.md), [19_data_model.md](19_data_model.md).
 
 ## Summary
 
@@ -43,7 +43,7 @@ Selecting a creature should reveal:
 
 The goal is understanding subjective state.
 
-**Skeleton:** `CreatureSnapshot` in `export/snapshots.rs` exports `id`, `position`, regulatory scalars (`energy`, `hydration`, `temperature_stress`, `integrity`, `fatigue`, `carried_mass`), `age`, full `sensor` state, `memory_node_count` / `memory_edges` counts, `memory_nodes_by_type`, `concept_count`, and `active_concepts`. Full memory graph JSON for a sample creature in `export/memory_dump.rs`. Morphology, predictions, and experience history are **planned**.
+**Skeleton:** `CreatureSnapshot` in `export/snapshots.rs` exports `id`, `position`, `morphology`, regulatory scalars (`energy`, `hydration`, `temperature_stress`, `integrity`, `fatigue`, `carried_mass`), `age`, full `sensor` state, `memory_node_count` / `memory_edges` counts, `memory_nodes_by_type`, `concept_count`, and `active_concepts`. Full memory graph JSON for a sample creature in `export/memory_dump.rs`. Predictions and experience history are **planned**.
 
 ## Sensor Inspector
 
@@ -250,6 +250,7 @@ Export formats:
 |--------|--------|
 | JSON (world snapshot) | Implemented — `exports/snapshots/world_final.json` |
 | JSONL (tick log) | Implemented — `exports/logs/tick_log.jsonl` |
+| JSON (narrative summary) | Implemented — `exports/logs/narrative_summary.json` |
 | CSV | Planned |
 | GraphML | Implemented — `snapshots/memory_creature_{id}.graphml` |
 | Images | Partial — `load_snapshot.py --plot` |
@@ -262,14 +263,17 @@ The simulation should support both scientific and artistic analysis.
 
 ```
 Simulation::run()
-  → export_all(sim, output_dir)
+  → export_all(sim, output_dir)   # output_dir resolved via resolve_output_dir() to workspace exports/
     → write_snapshot → WorldSnapshot::from_simulation
     → write_tick_log → TickLogEntry per tick
+    → write_narrative_summary → logs/narrative_summary.json (tick-log event scan)
     → export_memory_for_sim → snapshots/memory_creature_{id}.json + .graphml
     → optional interval snapshots via `--snapshot-interval N` → world_tick_{t}.json
 ```
 
-Implemented in `sim-core/src/export/mod.rs`, `snapshots.rs`, `logs.rs`, `memory_dump.rs`.
+`--output exports` from the workspace root writes to `<repo>/exports/`, not `sim-core/exports/`.
+
+Implemented in `sim-core/src/export/mod.rs`, `snapshots.rs`, `logs.rs`, `narrative.rs`, `memory_dump.rs`.
 
 ### Python tools
 
@@ -284,7 +288,8 @@ python analysis/scripts/load_snapshot.py --plot organic
 
 | Tool | Location | Status |
 |------|----------|--------|
-| `WorldSnapshot` / `CreatureSnapshot` | `export/snapshots.rs` | Memory node counts by type, concept count, active concepts |
+| `WorldSnapshot` / `CreatureSnapshot` | `export/snapshots.rs` | Morphology, memory node counts by type, concept count, active concepts |
+| `NarrativeSummary` | `export/narrative.rs` | First birth/death/dig, concept spikes, birth bursts from tick log |
 | `MemoryGraphExport` / GraphML | `export/memory_dump.rs` | JSON + GraphML nodes/edges with strength, type |
 | `--snapshot-interval` CLI | `main.rs`, `scheduler.rs` | Periodic `world_tick_{t}.json` checkpoints |
 | `TickLogEntry` | `export/logs.rs` | Births, deaths, `push_events`, action counts, sound slice |
@@ -295,7 +300,8 @@ python analysis/scripts/load_snapshot.py --plot organic
 | All specialized viewers | — | Planned |
 | CSV / timeline exports | — | Planned |
 | Real-time inspection | — | Planned |
-| Narrative extraction | — | Planned |
+| `resolve_output_dir()` | `export/mod.rs` | Workspace-root-relative `--output` path |
+| Narrative extraction | `export/narrative.rs` | Skeleton — tick-log scan at end of run |
 
 ## Planned
 
@@ -306,7 +312,7 @@ python analysis/scripts/load_snapshot.py --plot organic
 - Historical event timeline in exports
 - Multi-checkpoint snapshots for time-travel archaeology
 - Jupyter notebooks in `analysis/notebooks/`
-- Narrative extraction pipeline for biographies and migration stories — see [27_narrative_extraction_and_interpretation.md](27_narrative_extraction_and_interpretation.md)
+- Narrative extraction pipeline for biographies and migration stories — see [27_narrative_extraction_and_interpretation.md](27_narrative_extraction_and_interpretation.md) (skeleton `narrative_summary.json` implemented)
 
 ## Cross-references
 

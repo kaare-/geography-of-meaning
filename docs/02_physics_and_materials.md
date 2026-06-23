@@ -30,7 +30,7 @@ Each voxel tracks composition and physical state via `VoxelFields` in `sim-core/
 
 Empty space within solid matter. Erosion increases porosity. High porosity transports water and weakens structural integrity.
 
-**Skeleton:** field initialized from clay/coarse mix at terrain gen; no erosion-driven updates yet.
+**Partial:** initialized from clay/coarse mix at terrain gen; `water.rs` flow increments `erosion_damage` and redistributes clay/organic/coarse mineral during sediment transport and deposition.
 
 ## Permeability
 

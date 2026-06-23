@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::creatures::Creature;
+use crate::creatures::morphology::Morphology;
 use crate::math::Vec3f;
 use crate::memory::{ActiveConcept, MemoryNodeSummary};
 use crate::simulation::Simulation;
@@ -42,6 +43,7 @@ pub struct CreatureSnapshot {
     pub sleeping: bool,
     pub sleep_ticks_remaining: u32,
     pub signature: u64,
+    pub morphology: Morphology,
     pub vocal_profile: crate::creatures::genome::VocalProfile,
     pub sensor: crate::creatures::SensorState,
     pub memory_node_count: usize,
@@ -67,6 +69,7 @@ impl CreatureSnapshot {
             sleeping: creature.sleep.sleeping,
             sleep_ticks_remaining: creature.sleep.ticks_remaining,
             signature: creature.signature,
+            morphology: creature.morphology,
             vocal_profile: creature.genome.vocal_profile,
             sensor: creature.sensor,
             memory_node_count: creature.memory_graph.nodes.len(),

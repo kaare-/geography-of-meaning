@@ -2,11 +2,13 @@ pub mod actions;
 pub mod creature;
 pub mod genome;
 pub mod lifecycle;
+pub mod morphology;
 pub mod regulation;
 pub mod sensors;
 pub mod spatial;
 
 pub use actions::{apply_action, choose_action, Action};
+pub use morphology::Morphology;
 pub use spatial::{
     compute_follow_direction, push_strength, resolve_position_overlaps, try_creature_move_at,
     try_creature_push_at, PushEvent, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST,

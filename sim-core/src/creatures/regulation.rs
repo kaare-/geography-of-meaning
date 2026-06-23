@@ -28,14 +28,16 @@ impl Default for RegulatoryState {
 }
 
 impl RegulatoryState {
-    pub fn tick_passive_drain(&mut self, metabolism: f32) {
-        self.energy = (self.energy - metabolism).max(0.0);
-        self.hydration = (self.hydration - metabolism * 0.35).max(0.0);
-        self.fatigue = (self.fatigue + metabolism * 0.3).min(1.0);
+    pub fn tick_passive_drain(&mut self, metabolism: f32, mass_multiplier: f32) {
+        let drain = metabolism * mass_multiplier;
+        self.energy = (self.energy - drain).max(0.0);
+        self.hydration = (self.hydration - drain * 0.35).max(0.0);
+        self.fatigue = (self.fatigue + drain * 0.3).min(1.0);
     }
 
-    pub fn apply_environmental_stress(&mut self, sensor: &SensorState) {
-        self.temperature_stress = sensor.internal_temperature_stress;
+    pub fn apply_environmental_stress(&mut self, sensor: &SensorState, heat_retention: f32, mass: f32) {
+        let coupling = (1.0 / (1.0 + mass * heat_retention * 0.6)).clamp(0.15, 1.0);
+        self.temperature_stress = sensor.internal_temperature_stress * coupling;
         if self.temperature_stress > 0.85 {
             self.integrity =
                 (self.integrity - (self.temperature_stress - 0.85) * 0.007).max(0.0);
@@ -61,8 +63,8 @@ impl RegulatoryState {
         self.fatigue = (self.fatigue + fatigue_cost).min(1.0);
     }
 
-    pub fn clamp(&mut self) {
-        self.energy = self.energy.clamp(0.0, 1.0);
+    pub fn clamp(&mut self, energy_cap: f32) {
+        self.energy = self.energy.clamp(0.0, energy_cap);
         self.hydration = self.hydration.clamp(0.0, 1.0);
         self.temperature_stress = self.temperature_stress.clamp(0.0, 1.0);
         self.integrity = self.integrity.clamp(0.0, 1.0);

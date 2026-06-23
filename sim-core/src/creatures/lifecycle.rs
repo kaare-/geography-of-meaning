@@ -6,6 +6,7 @@ use crate::world::World;
 
 use super::creature::Creature;
 use super::genome::Genome;
+use super::morphology::Morphology;
 
 /// Organic matter returned to the voxel field when a creature dies.
 pub const DEATH_ORGANIC_DEPOSIT: f32 = 0.08;
@@ -130,9 +131,11 @@ pub fn try_reproduce<R: Rng + ?Sized>(
     }
     let position = find_offspring_position(parent, world, rng)?;
     let genome = Genome::mutate_from(&parent.genome, rng);
+    let morphology = Morphology::mutate_from(&parent.morphology, &genome, rng);
     let offspring_signature = mutate_signature(parent.signature, rng);
     let mut offspring = Creature::new(offspring_id, position, offspring_signature);
     offspring.genome = genome;
+    offspring.morphology = morphology;
     offspring.regulatory.energy = 0.5;
     offspring.regulatory.hydration = 0.6;
     let birth = BirthEvent {

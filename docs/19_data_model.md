@@ -122,7 +122,7 @@ A creature is a physical organism with internal regulation, sensors, memory, and
 |-------|--------|------|
 | `id` | Implemented | `Creature::id: u64` |
 | `position` | Implemented | `Creature::position: Vec3f` |
-| `morphology` | Planned | — (see Morphology) |
+| `morphology` | Implemented | `Creature::morphology: Morphology` |
 | `genome` | Implemented | `Creature::genome: Genome` |
 | `regulatory_state` | Implemented | `Creature::regulatory: RegulatoryState` |
 | `sensor_state` | Implemented | `Creature::sensor: SensorState` |
@@ -137,19 +137,16 @@ See [03_creatures.md](03_creatures.md).
 
 ## Morphology
 
-**Planned** — morphology defines physical tradeoffs.
+**Implemented** — `Morphology` in `sim-core/src/creatures/morphology.rs` defines physical tradeoffs.
 
-Fields may include:
+| Field | Role |
+|-------|------|
+| `mass` | Metabolism multiplier, push strength, thermal coupling |
+| `reserve_capacity` | Energy ceiling (`RegulatoryState::clamp`) |
+| `heat_retention` | Thermal inertia with mass |
+| `carry_capacity` | Max `carried_mass` for carry/drop actions |
 
-* mass
-* volume
-* reserve_capacity
-* movement_efficiency
-* push_strength
-* heat_retention
-* carry_capacity
-
-Morphology is prediction made biological. No `Morphology` struct exists yet; movement cost is implicit in `apply_action()`. See [03_creatures.md](03_creatures.md).
+Derived from genome at spawn (`Morphology::from_genome`); mutated on reproduction (`mutate_from`). `push_strength()` is computed from mass (not stored). Exported in `CreatureSnapshot`. See [03_creatures.md](03_creatures.md).
 
 ## Genome
 
@@ -163,6 +160,10 @@ Genome defines inherited tendencies. It does not contain concepts or knowledge.
 | sensor noise | Implemented | `sensor_noise_scale` |
 | movement efficiency | Implemented | `move_speed` |
 | metabolism | Implemented | `metabolism_rate` |
+| mass bias | Implemented | `mass_bias` |
+| heat retention | Implemented | `heat_retention` |
+| carry bias | Implemented | `carry_bias` |
+| reserve bias | Implemented | `reserve_bias` |
 | learning rate | Planned | — |
 | memory capacity | Planned | — |
 | sleep tendency | Planned | — |
@@ -397,7 +398,6 @@ Labels are analysis overlays. They are not creature cognition. Forbidden as crea
 
 ## Planned
 
-- `Morphology` struct and morphology-driven action costs
 - `ActiveConcept` activation layer
 - `SoundEvent` type and world sound queue
 - Full `SimulationEvent` enum (birth, death, sleep, collapse)

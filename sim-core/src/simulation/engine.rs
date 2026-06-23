@@ -5,7 +5,8 @@ use crate::creatures::{
     apply_action, choose_action, compute_follow_direction, deposit_creature_organic,
     dominant_heard_signature, read_sensors_with_noise, resolve_position_overlaps,
     try_creature_move_at, try_creature_push_at, try_reproduce, Action, Creature, DeathEvent,
-    Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, REPRODUCTION_ENERGY_COST,
+    Experience, FOLLOW_ENERGY_COST, FOLLOW_FATIGUE_COST, Genome, Morphology,
+    REPRODUCTION_ENERGY_COST,
 };
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
@@ -34,7 +35,11 @@ impl Simulation {
         let mut creatures = Vec::new();
         for (i, pos) in spawn_positions.iter().enumerate() {
             let signature = rng.gen::<u64>();
+            let genome = random_spawn_genome(&mut rng);
+            let morphology = Morphology::from_genome(&genome);
             let mut creature = Creature::new(i as u64 + 1, *pos, signature);
+            creature.genome = genome;
+            creature.morphology = morphology;
             creature.sensor =
                 read_sensors_with_noise(&creature, &world, &creatures, &mut rng, 1.0);
             creatures.push(creature);
@@ -43,11 +48,16 @@ impl Simulation {
         while creatures.len() < config.creature_count {
             let id = creatures.len() as u64 + 1;
             let signature = rng.gen::<u64>();
+            let genome = random_spawn_genome(&mut rng);
+            let morphology = Morphology::from_genome(&genome);
             let pos = spawn_positions
                 .first()
                 .copied()
                 .unwrap_or(crate::math::Vec3f::new(8.0, 8.0, 4.0));
-            creatures.push(Creature::new(id, pos, signature));
+            let mut creature = Creature::new(id, pos, signature);
+            creature.genome = genome;
+            creature.morphology = morphology;
+            creatures.push(creature);
         }
 
         let creature_count = config.creature_count;
@@ -124,10 +134,15 @@ impl Simulation {
 
             creature
                 .regulatory
-                .tick_passive_drain(creature.genome.metabolism_rate);
-            creature
-                .regulatory
-                .apply_environmental_stress(&creature.sensor);
+                .tick_passive_drain(
+                    creature.genome.metabolism_rate,
+                    creature.morphology.metabolism_multiplier(),
+                );
+            creature.regulatory.apply_environmental_stress(
+                &creature.sensor,
+                creature.morphology.heat_retention,
+                creature.morphology.mass,
+            );
 
             if erosion_damage_tick {
                 let pos = creature.position.floor_i();
@@ -210,7 +225,9 @@ impl Simulation {
                 }
             }
             creature.refresh_active_concepts();
-            creature.regulatory.clamp();
+            creature
+                .regulatory
+                .clamp(creature.morphology.reserve_capacity);
             if creature.regulatory.energy <= 0.0 {
                 creature.regulatory.energy_depleted_ticks =
                     creature.regulatory.energy_depleted_ticks.saturating_add(1);
@@ -319,4 +336,15 @@ impl Simulation {
             self.tick();
         }
     }
+}
+
+fn random_spawn_genome<R: Rng + ?Sized>(rng: &mut R) -> Genome {
+    let mut genome = Genome::default();
+    genome.mass_bias = rng.gen_range(0.5..1.8);
+    genome.heat_retention = rng.gen_range(0.2..0.9);
+    genome.carry_bias = rng.gen_range(0.5..1.6);
+    genome.reserve_bias = rng.gen_range(0.3..0.9);
+    genome.metabolism_rate = rng.gen_range(0.005..0.014);
+    genome.move_speed = rng.gen_range(0.7..1.4);
+    genome
 }

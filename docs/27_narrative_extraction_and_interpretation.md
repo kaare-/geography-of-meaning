@@ -4,7 +4,7 @@
 
 ## Status
 
-**Planned** — no narrative extraction pipeline in code yet. Depends on observability exports ([26_research_tools_and_observability.md](26_research_tools_and_observability.md)), historical event recording ([24_world_history_and_archaeology.md](24_world_history_and_archaeology.md)), and memory/concept inspection ([06_memory.md](06_memory.md), [07_concepts.md](07_concepts.md)).
+**Partial** — `export/narrative.rs` scans the tick log at end of run and writes `exports/logs/narrative_summary.json` (first birth/death/dig, concept-formation spikes, birth bursts). Full significance scoring, biographies, and query APIs remain **planned**. Depends on observability exports ([26_research_tools_and_observability.md](26_research_tools_and_observability.md)), historical event recording ([24_world_history_and_archaeology.md](24_world_history_and_archaeology.md)), and memory/concept inspection ([06_memory.md](06_memory.md), [07_concepts.md](07_concepts.md)).
 
 ## Summary
 
@@ -291,7 +291,7 @@ See [00_project_overview.md](00_project_overview.md) — **meaning = predictive 
 
 | Mechanism | Location | Status |
 |-----------|----------|--------|
-| Narrative extraction pipeline | — | Planned |
+| Narrative extraction pipeline | `export/narrative.rs` | Partial — `narrative_summary.json` from tick log |
 | Event significance scoring | — | Planned |
 | Biography / genealogy export | — | Planned |
 | Query interface | — | Planned |

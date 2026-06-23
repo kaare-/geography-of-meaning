@@ -17,7 +17,7 @@ pip install -r requirements.txt
 python analysis/scripts/load_snapshot.py exports/snapshots/world_final.json
 ```
 
-Exports land in `exports/snapshots/world_final.json` and `exports/logs/tick_log.jsonl`.
+Exports land in `exports/` at the workspace root (not `sim-core/exports/`), including `snapshots/world_final.json`, `logs/tick_log.jsonl`, and `logs/narrative_summary.json`.
 
 ## Repository layout
 

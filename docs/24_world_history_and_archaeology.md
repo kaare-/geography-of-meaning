@@ -349,7 +349,7 @@ This doc (24) addresses the **material record** those settlements leave — and 
 
 | Component | Status | Location |
 |-----------|--------|----------|
-| `erosion_damage` field | Present, not tick-updated | `world/voxel.rs` |
+| `erosion_damage` field | Tick-updated by water flow | `world/water.rs`, `world/voxel.rs` |
 | `porosity` field | Present, terrain-init only | `world/voxel.rs` |
 | `binder`, `organic` fields | Present | `world/voxel.rs` |
 | Environmental memory tick | Planned | `world/` |

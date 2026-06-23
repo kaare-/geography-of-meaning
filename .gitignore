@@ -11,4 +11,7 @@ venv/
 
 # Exports (keep directory structure)
 exports/snapshots/*.json
+exports/snapshots/*.graphml
 exports/logs/*.jsonl
+exports/logs/narrative_summary.json
+sim-core/exports/

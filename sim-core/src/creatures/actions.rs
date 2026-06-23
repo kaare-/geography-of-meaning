@@ -45,7 +45,6 @@ const PREDICTION_WEIGHT: f32 = 1.5;
 const EMIT_SOUND_BASE_WEIGHT: f32 = 0.15;
 const EMIT_SOUND_ENERGY_BOOST: f32 = 2.5;
 const EMIT_SOUND_ENERGY_COST: f32 = 0.08;
-const CARRIED_MASS_CAP: f32 = 0.5;
 const DIG_ENERGY_COST: f32 = 0.09;
 const DIG_FATIGUE_COST: f32 = 0.15;
 const CARRY_ENERGY_COST: f32 = 0.04;
@@ -143,7 +142,9 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature.sensor.contact_hard * 1.5;
         }
     }
-    if creature.regulatory.carried_mass < CARRIED_MASS_CAP && creature.sensor.chemical_organic > 0.08 {
+    if creature.regulatory.carried_mass < creature.morphology.carry_capacity
+        && creature.sensor.chemical_organic > 0.08
+    {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Carry)) {
             weights[i].1 += creature.sensor.chemical_organic * 2.0;
         }
@@ -272,8 +273,8 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                 let organic_loose = (*voxel.organic * 0.15).min(0.03);
                 *voxel.organic -= organic_loose;
 
-                if creature.regulatory.carried_mass < CARRIED_MASS_CAP {
-                    let room = CARRIED_MASS_CAP - creature.regulatory.carried_mass;
+                if creature.regulatory.carried_mass < creature.morphology.carry_capacity {
+                    let room = creature.morphology.carry_capacity - creature.regulatory.carried_mass;
                     creature.regulatory.carried_mass += organic_loose.min(room);
                 }
 
@@ -284,7 +285,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
             }
         }
         Action::Carry => {
-            if creature.regulatory.carried_mass >= CARRIED_MASS_CAP {
+            if creature.regulatory.carried_mass >= creature.morphology.carry_capacity {
                 return false;
             }
             let pos = creature.position.floor_i();
@@ -297,7 +298,7 @@ pub fn apply_action(creature: &mut Creature, action: Action, world: &mut World) 
                         let check = Vec3i::new(pos.x + dx, pos.y + dy, pos.z + dz);
                         if let Some(voxel) = world.sample_voxel_mut(check) {
                             if *voxel.organic > 0.05 {
-                                let room = CARRIED_MASS_CAP - creature.regulatory.carried_mass;
+                                let room = creature.morphology.carry_capacity - creature.regulatory.carried_mass;
                                 let transfer = (*voxel.organic * 0.25).min(0.05).min(room);
                                 *voxel.organic -= transfer;
                                 creature.regulatory.carried_mass += transfer;
