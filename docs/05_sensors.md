@@ -117,3 +117,100 @@ All sensor values are grounded in simulated physics state, never in semantic lab
 
 - Per-channel noise correlation vs independent noise?
 - Should light account for diurnal climate curve?
+
+---
+
+## Environmental Sound and Action Sound
+
+> **Addendum** — acoustic traces as sensor evidence; incidental action sounds planned.
+
+### Core Principle
+
+> Sound is **evidence**, not message.
+
+Creatures never receive decoded meanings like "food nearby" or "creature approaching." They receive **acoustic traces** — scalar intensities and rhythms on `sound_ambient` and `sound_calls` — that enter experience like any other sensor channel. What a researcher later labels as feeding noise, construction, or a conspecific call is an emergent interpretation of trace→outcome pairings in memory, not a built-in category in cognition.
+
+### Action-Generated Sound
+
+Physical actions disturb the environment and produce sound as a side effect of work, not as communication:
+
+| Action class | Acoustic character (researcher label) |
+|--------------|--------------------------------------|
+| Movement | Footstep rhythm, scrape on contact material |
+| Dig | Impulsive strikes, debris scatter |
+| Carry / drop | Load shift, impact on placement |
+| Push | Collision, displacement thud |
+| Eat | Chewing / grinding on organic contact |
+| Place / binder | Construction taps, adhesion work |
+| Rest | Low-amplitude settling, breathing proxy |
+| Vocalization (`EmitSound`) | Intentional call — see [10_communication.md](10_communication.md) |
+
+**Planned:** each resolving action emits low-amplitude `SoundEvent`s into `World::active_sounds`; sensors aggregate them into `sound_ambient` (environmental + incidental) and `sound_calls` (conspecific intentional emissions). No action opcode carries a semantic sound label.
+
+### Material Coupling
+
+Local voxel fields shape how the same action sounds — without exposing material **names** to creatures:
+
+| Material trace (voxel field) | Acoustic signature (researcher label) |
+|------------------------------|---------------------------------------|
+| Hard mineral | Sharp, high-frequency impulse |
+| Soft mineral / clay | Muffled thud |
+| Wet / high water content | Splash, dampened resonance |
+| Organic | Soft crunch, decay rustle |
+| Void / low solid fraction | Hollow echo, less attenuation |
+
+**Planned:** sensor read derives acoustic timbre from neighborhood fractions (`hard_mineral`, `soft_mineral`, `clay`, `organic`, `void_fraction`, moisture) as continuous scalars — creatures see only the resulting trace vector, never `"granite"` or `"mud"`.
+
+### Morphology Coupling
+
+Body parameters modulate incidental sound production:
+
+| Morphology field | Sound effect |
+|------------------|--------------|
+| `mass` | Higher impact amplitude on movement and drop |
+| `move_speed` (genome) | Faster cadence, sharper rhythm |
+| `carried_mass` | Heavier footfalls, louder placement |
+
+**Implemented:** `Morphology` (`creatures/morphology.rs`) — `mass`, `carry_capacity`, `heat_retention`, `reserve_capacity` derived from genome at spawn and inherited on reproduction. Incidental sound emission from morphology is **planned** (sprint after communication incidental-signals addendum).
+
+### Acoustic Ecology
+
+The soundscape mixes natural and organism-generated traces:
+
+| Source | Channel bias | Status |
+|--------|--------------|--------|
+| Water flow, rain | `sound_ambient` | Partial (ambient floor from active sounds) |
+| Collapse / erosion | `sound_ambient` | Planned |
+| Movement, digging, feeding | `sound_ambient` | Planned (incidental `SoundEvent`s) |
+| Construction (place, binder) | `sound_ambient` | Planned |
+| Intentional calls | `sound_calls` | Partial (`EmitSound` → `SoundEvent`) |
+
+Acoustic ecology is **competitive attention** — loud natural events can mask or contextualize social signals. Listeners learn which trace combinations precede regulatory outcomes, not which "source type" spoke.
+
+### Learning Through Sound
+
+Repeated pairings build predictive structure:
+
+- movement rhythm + rising `chemical_organic` → energy gain (researcher label: *food discovery via follower*)
+- digging sound + exposed organic trace → foraging opportunity
+- construction rhythm + shelter-like thermal/light pattern → aggregated rest benefit
+
+These are **memory edges** (`SoundActivates`, `precedes`, `action_leads_to`) — never predefined labels in creature code. Meaning emerges when sound traces change expectation about future regulation ([00_project_overview.md](00_project_overview.md)).
+
+### Current implementation (sound addendum)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| `sound_ambient`, `sound_calls` | `creatures/sensors.rs` | Read from `World::active_sounds` |
+| `EmitSound` → `SoundEvent` | `creatures/actions.rs`, `world/sound.rs` | Intentional vocalization only |
+| Incidental action sounds | — | **Planned** (dig/move/carry/etc.) |
+| `Morphology` | `creatures/morphology.rs` | Implemented; sound coupling planned |
+| Material acoustic coupling | `sensors.rs` neighborhood read | **Planned** (trace-only, no material names) |
+
+### Cross-references (sound addendum)
+
+| Topic | Doc |
+|-------|-----|
+| Intentional vs incidental signals | [10_communication.md](10_communication.md) § Communication and Incidental Signals |
+| Signal evolution & families | [28_language_and_signal_evolution.md](28_language_and_signal_evolution.md) |
+| Social following | [11_social_systems.md](11_social_systems.md) |

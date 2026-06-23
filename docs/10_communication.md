@@ -143,3 +143,62 @@ A sound becomes meaningful when it **changes expectations about future regulator
 
 - Should signatures modulate sound parameters or live in a separate channel?
 - Maximum audible range vs chemical trace range?
+
+---
+
+## Communication and Incidental Signals
+
+> **Addendum** — intentional calls vs action side-effects; social prediction before language.
+
+### Intentional vs Incidental Signals
+
+| Class | Definition | Examples (researcher labels) |
+|-------|------------|------------------------------|
+| **Intentional** | Emission chosen to alter another's attention or prediction | Attraction call, warning burst, recruitment rhythm |
+| **Incidental** | Sound produced as physical side-effect of work or movement | Footsteps, digging, carrying, eating, construction |
+
+Creatures receive both as sensor traces. Only **repeated trace→outcome pairings** in memory distinguish what researchers later call "signal" from "noise." No channel carries a built-in intentional/incidental flag in cognition.
+
+### Evolutionary Path
+
+A plausible developmental arc (research narrative, not scripted):
+
+1. **Movement sound** — footfalls and scrape rhythms from locomotion (`sound_ambient`, planned incidental emission)
+2. **Food discovery association** — listeners pairing movement rhythm + organic chemical trace with energy gain
+3. **Attracts followers** — `Action::Follow` biased when `sound_calls` or creature chemical traces salient
+4. **Specialized vocal signal** — `EmitSound` compresses the rhythm into a cheaper, directed call (`genome.vocal_profile`)
+
+Each step is prediction refinement, not a new message type.
+
+### Signal Borrowing
+
+Vocal signals may **imitate** environmental and action rhythms — movement cadence, digging strikes, feeding grind — because listeners already predict from those patterns. Language-from-environment hypotheses apply at the trace level: a call that echoes a successful digging rhythm borrows an existing predictive subgraph rather than inventing semantics.
+
+**Partial:** `genome.vocal_profile` (pitch, duration, amplitude, rhythm) mutates on reproduction; `SoundEvent::signal_family_id` hashes profile for family tracking ([28_language_and_signal_evolution.md](28_language_and_signal_evolution.md)).
+
+### Social Prediction
+
+Before symbolic language, organisms benefit from anticipating conspecific futures:
+
+- movement sound + creature chemical trace + positive regulatory outcome → **follow**
+- repeated sound→outcome edges for a `signature` → **trust** (confidence, not a trust variable)
+
+**Implemented (stub):** `Action::Follow` with `trusted_follow_boost` in `memory/graph.rs` — follow weight rises when `sound_calls` is salient and the heard emitter's signature has positive sound→outcome history. `dominant_heard_signature` in `sensors.rs` resolves emitter identity per tick.
+
+### Current implementation (incidental signals addendum)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| `Action::EmitSound` | `creatures/actions.rs` | Intentional vocalization (partial) |
+| Incidental dig/move/carry sounds | — | **Planned** — low-amplitude `SoundEvent`s |
+| `Action::Follow` + `trusted_follow_boost` | `actions.rs`, `memory/graph.rs` | Social prediction stub (sprint 23) |
+| `vocal_profile` mutation | `creatures/genome.rs`, `lifecycle.rs` | Signal families (sprint 20) |
+| `signal_family_id` | `world/sound.rs` | Family hash on `SoundEvent` |
+
+### Cross-references (incidental signals addendum)
+
+| Topic | Doc |
+|-------|-----|
+| Acoustic sensor grounding | [05_sensors.md](05_sensors.md) § Environmental Sound and Action Sound |
+| Signal space & drift | [28_language_and_signal_evolution.md](28_language_and_signal_evolution.md) |
+| Developmental & social inheritance | [13_inheritance.md](13_inheritance.md) § Developmental Signals and Social Inheritance |
