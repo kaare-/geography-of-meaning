@@ -299,6 +299,7 @@ impl Simulation {
             timing.movement_ms += elapsed_ms(movement_start);
 
             creature.regulatory.apply_passive_hydration(&creature.sensor);
+            creature.regulatory.apply_dehydration_stress();
             creature
                 .regulatory
                 .apply_ambient_processing_cost(creature.sensor.sound_ambient);

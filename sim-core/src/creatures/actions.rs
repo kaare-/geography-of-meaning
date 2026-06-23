@@ -44,7 +44,7 @@ impl Action {
     }
 }
 
-const FOLLOW_BASE_WEIGHT: f32 = 0.3;
+const FOLLOW_BASE_WEIGHT: f32 = 0.45;
 const EXPLORATION_RATE: f32 = 0.15;
 const PREDICTION_WEIGHT: f32 = 1.5;
 const EMIT_SOUND_BASE_WEIGHT: f32 = 0.15;
@@ -61,7 +61,8 @@ const PLACE_MATERIAL_FATIGUE_COST: f32 = 0.1;
 const APPLY_BINDER_ENERGY_COST: f32 = 0.06;
 const APPLY_BINDER_FATIGUE_COST: f32 = 0.12;
 const BINDER_ORGANIC_COST: f32 = 0.04;
-const TRANSFER_ORGANIC_BASE_WEIGHT: f32 = 0.12;
+const TRANSFER_ORGANIC_BASE_WEIGHT: f32 = 0.18;
+const TRANSFER_BOOST_CARRIED_MIN: f32 = 0.04;
 
 const UNCERTAINTY_EXPLORATION_BOOST: f32 = 0.12;
 
@@ -139,12 +140,24 @@ pub fn choose_action<R: Rng + ?Sized>(
         }
     }
 
+    if creature.regulatory.hydration < 0.35 {
+        let thirst = (0.35 - creature.regulatory.hydration).max(0.0);
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Rest)) {
+            weights[i].1 += thirst * 2.5;
+        }
+        if creature.sensor.chemical_wet_mineral > 0.08 {
+            if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Dig)) {
+                weights[i].1 += creature.sensor.chemical_wet_mineral * thirst * 3.0;
+            }
+        }
+    }
+
     if creature.sensor.chemical_creature > 0.05 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
             weights[i].1 += creature.sensor.chemical_creature * 2.0;
         }
     }
-    if creature.sensor.sound_calls > 0.08 {
+    if creature.sensor.sound_calls > 0.05 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Follow)) {
             weights[i].1 += creature.sensor.sound_calls * 1.5;
             weights[i].1 += creature
@@ -171,9 +184,9 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature.sensor.chemical_organic * 2.0;
         }
     }
-    if creature.regulatory.carried_mass > 0.15 {
+    if creature.regulatory.carried_mass > 0.22 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::Drop)) {
-            weights[i].1 += 1.5 + creature.regulatory.carried_mass;
+            weights[i].1 += 1.2 + creature.regulatory.carried_mass;
         }
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::PlaceMaterial)) {
             weights[i].1 += creature.regulatory.carried_mass;
@@ -189,10 +202,18 @@ pub fn choose_action<R: Rng + ?Sized>(
             weights[i].1 += creature.sensor.chemical_binder + 0.3;
         }
     }
-    if creature.regulatory.carried_mass > 0.1 && creature.sensor.chemical_creature > 0.05 {
+    if creature.regulatory.carried_mass > 0.04 && creature.sensor.chemical_creature > 0.03 {
         if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::TransferOrganic)) {
-            weights[i].1 += creature.regulatory.carried_mass * 0.5
-                + creature.sensor.chemical_creature * 1.0;
+            weights[i].1 += creature.regulatory.carried_mass * 1.5
+                + creature.sensor.chemical_creature * 1.5;
+        }
+    }
+    if creature.regulatory.energy > 0.55
+        && creature.regulatory.carried_mass > TRANSFER_BOOST_CARRIED_MIN
+        && creature.sensor.chemical_creature > 0.02
+    {
+        if let Some(i) = weights.iter().position(|(a, _)| matches!(a, Action::TransferOrganic)) {
+            weights[i].1 += 0.8;
         }
     }
 

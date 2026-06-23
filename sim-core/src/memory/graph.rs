@@ -137,7 +137,7 @@ impl MemoryGraph {
     }
 
     pub fn record_heard_sound(&mut self, sensory: SensorState, intensity: f32, signature: u64) {
-        if intensity < 0.08 {
+        if intensity < 0.06 {
             return;
         }
         let sensory_id = self.find_or_create_sensory(sensory);
@@ -166,7 +166,7 @@ impl MemoryGraph {
         }
         by_sig
             .values()
-            .filter(|(total, w)| *w > 0.05 && *total / *w > 0.03)
+            .filter(|(total, w)| *w > 0.03 && *total / *w > 0.01)
             .count()
     }
 
@@ -175,12 +175,12 @@ impl MemoryGraph {
         let Some(sig) = heard_signature else {
             return 0.0;
         };
-        if sound_calls < 0.08 {
+        if sound_calls < 0.05 {
             return 0.0;
         }
         let outcome = self.signature_mean_outcome(sig);
-        if outcome > 0.03 {
-            sound_calls * outcome * 2.0
+        if outcome > 0.01 {
+            sound_calls * outcome * 2.5
         } else {
             0.0
         }
@@ -194,13 +194,13 @@ impl MemoryGraph {
         heard_signature: Option<u64>,
         heard_call_frequency: Option<f32>,
     ) -> f32 {
-        if bias < 0.01 || sound_calls < 0.08 {
+        if bias < 0.01 || sound_calls < 0.05 {
             return 0.0;
         }
         let Some(freq) = heard_call_frequency else {
             return 0.0;
         };
-        if freq < 0.55 {
+        if freq < 0.40 {
             return 0.0;
         }
         let Some(sig) = heard_signature else {
