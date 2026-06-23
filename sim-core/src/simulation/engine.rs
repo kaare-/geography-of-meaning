@@ -11,6 +11,7 @@ use crate::creatures::{
 use crate::world::{emit_environmental_sound, EnvironmentalSoundKind};
 use crate::export::logs::{ActionCounts, TickLogEntry};
 use crate::export::timing::{elapsed_ms, TickTimingMs, TimingWindow};
+use crate::export::trajectory::TrajectoryWriter;
 use crate::simulation::scheduler::EROSION_DAMAGE_NUDGE;
 use crate::world::World;
 
@@ -29,6 +30,7 @@ pub struct Simulation {
     pub(crate) timing_window: TimingWindow,
     pub(crate) pending_export_ms: f64,
     pub(crate) pending_snapshot_ms: f64,
+    pub(crate) trajectory_writer: Option<TrajectoryWriter>,
 }
 
 impl Simulation {
@@ -69,6 +71,14 @@ impl Simulation {
         }
 
         let creature_count = config.creature_count;
+        let trajectory_writer = config.trajectory_log.as_ref().and_then(|path| {
+            TrajectoryWriter::open(
+                path,
+                config.trajectory_every,
+                config.trajectory_creature_ids.clone(),
+            )
+            .ok()
+        });
         Self {
             world,
             creatures,
@@ -82,6 +92,7 @@ impl Simulation {
             timing_window: TimingWindow::default(),
             pending_export_ms: 0.0,
             pending_snapshot_ms: 0.0,
+            trajectory_writer,
         }
     }
 
@@ -495,6 +506,12 @@ impl Simulation {
                 .emit(self.world.time, self.config.timing_log.as_deref())
             {
                 eprintln!("Timing report failed: {e}");
+            }
+        }
+
+        if let Some(writer) = &mut self.trajectory_writer {
+            if let Err(e) = writer.record(self.world.time, &self.creatures) {
+                eprintln!("Trajectory log failed: {e}");
             }
         }
     }
