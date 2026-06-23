@@ -11,6 +11,9 @@ A simulation-art project investigating how **meaning emerges from prediction, me
 # Run simulation (100 ticks, 2x2 chunks, 5 creatures)
 cargo run -- --ticks 100 --seed 42 --world-size 2 --creatures 5 --output exports
 
+# Long runs: progress every 100 ticks (stdout and optional log file)
+cargo run -- --ticks 10000 --progress-every 100 --progress-log exports/logs/progress.log
+
 # Python analysis
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt

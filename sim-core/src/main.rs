@@ -29,6 +29,10 @@ struct Args {
     /// Print progress every N ticks (0 = disabled).
     #[arg(long, default_value_t = 0)]
     progress_every: u64,
+
+    /// Append progress lines to this file (same format as stdout).
+    #[arg(long)]
+    progress_log: Option<std::path::PathBuf>,
 }
 
 fn main() {
@@ -42,6 +46,7 @@ fn main() {
         output_dir: resolve_output_dir(&args.output),
         snapshot_interval: args.snapshot_interval,
         progress_every: args.progress_every,
+        progress_log: args.progress_log,
         ..SimulationConfig::default()
     };
 

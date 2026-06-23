@@ -31,6 +31,8 @@ pub struct SimulationConfig {
     pub dream_noise: bool,
     /// Print a one-line progress message to stdout every N ticks; 0 = disabled.
     pub progress_every: u64,
+    /// When set, append the same progress lines to this file (parent dirs created).
+    pub progress_log: Option<PathBuf>,
     /// Ticks per simulated day (diurnal phase); mirrored from `world::TICKS_PER_DAY`.
     pub ticks_per_day: u64,
 }
@@ -49,6 +51,7 @@ impl Default for SimulationConfig {
             snapshot_interval: 0,
             dream_noise: false,
             progress_every: 0,
+            progress_log: None,
             ticks_per_day: TICKS_PER_DAY,
         }
     }

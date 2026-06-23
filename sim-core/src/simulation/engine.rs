@@ -22,6 +22,9 @@ pub struct Simulation {
     pub rng: StdRng,
     pub tick_logs: Vec<TickLogEntry>,
     next_creature_id: u64,
+    pub(crate) run_births: u64,
+    pub(crate) run_deaths: u64,
+    pub(crate) sleep_creature_ticks: u64,
 }
 
 impl Simulation {
@@ -69,6 +72,9 @@ impl Simulation {
             rng,
             tick_logs: Vec::new(),
             next_creature_id: creature_count as u64 + 1,
+            run_births: 0,
+            run_deaths: 0,
+            sleep_creature_ticks: 0,
         }
     }
 
@@ -120,6 +126,9 @@ impl Simulation {
         let mut tick_split = 0u32;
 
         for creature in &mut self.creatures {
+            if creature.sleep.sleeping {
+                self.sleep_creature_ticks += 1;
+            }
             let sleep_result = creature.update_sleep(dream_noise, &mut self.rng);
             tick_concepts_formed += sleep_result.concepts_formed;
             tick_imagination += sleep_result.imagination_events;
@@ -311,6 +320,8 @@ impl Simulation {
         self.creatures = surviving;
         resolve_position_overlaps(&mut self.creatures, &self.world);
 
+        self.run_deaths += deaths.len() as u64;
+
         let mut births = Vec::new();
         let mut new_offspring = Vec::new();
         let mut reproduction_parents = Vec::new();
@@ -339,6 +350,7 @@ impl Simulation {
             }
         }
         self.creatures.extend(new_offspring);
+        self.run_births += births.len() as u64;
         for idx in reproduction_parents {
             self.creatures[idx]
                 .regulatory
@@ -387,14 +399,9 @@ impl Simulation {
         });
 
         if self.config.progress_every > 0 && self.world.time % self.config.progress_every == 0 {
-            let concept_total: usize = self.creatures.iter().map(|c| c.concepts.len()).sum();
-            println!(
-                "tick {}/{} pop={} concepts={}",
-                self.world.time,
-                self.config.ticks,
-                self.creatures.len(),
-                concept_total,
-            );
+            if let Err(e) = crate::export::progress::emit_progress(self, tick_imagination) {
+                eprintln!("Progress report failed: {e}");
+            }
         }
     }
 

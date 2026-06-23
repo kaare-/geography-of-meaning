@@ -10,6 +10,7 @@ use crate::simulation::Simulation;
 pub mod logs;
 pub mod memory_dump;
 pub mod narrative;
+pub mod progress;
 pub mod snapshots;
 
 pub use memory_dump::write_memory_graphml;
