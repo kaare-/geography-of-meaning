@@ -162,6 +162,7 @@ impl Simulation {
         let mut tick_merge = 0u32;
         let mut tick_split = 0u32;
 
+        let creatures_for_social = self.creatures.clone();
         for creature in &mut self.creatures {
             if creature.sleep.sleeping {
                 self.sleep_creature_ticks += 1;
@@ -194,6 +195,7 @@ impl Simulation {
                 heard_signature,
                 heard_call_frequency,
                 Some(&mut timing.prediction_ms),
+                &creatures_for_social,
             ));
             timing.action_selection_ms += elapsed_ms(action_start);
         }
@@ -260,7 +262,19 @@ impl Simulation {
                     if let Some(delta) =
                         compute_follow_direction(&self.creatures[idx], &self.creatures)
                     {
-                        if try_creature_move_at(&mut self.creatures, idx, delta, &mut self.world) {
+                        if delta.x == 0 && delta.y == 0 && delta.z == 0 {
+                            creature.regulatory.apply_action_cost(
+                                FOLLOW_ENERGY_COST * 0.5,
+                                FOLLOW_FATIGUE_COST * 0.5,
+                            );
+                            self.creatures[idx].regulatory = creature.regulatory;
+                            action_counts.follow_count += 1;
+                        } else if try_creature_move_at(
+                            &mut self.creatures,
+                            idx,
+                            delta,
+                            &mut self.world,
+                        ) {
                             creature.position = self.creatures[idx].position;
                             creature.regulatory = self.creatures[idx].regulatory;
                             creature.regulatory.apply_action_cost(
